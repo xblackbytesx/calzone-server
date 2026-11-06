@@ -95,7 +95,11 @@ headless Chromium against the real binary (drag, scope, undo, panel,
 delete, quick add, keys, phone, light, Dutch). 161 workspace tests.
 Step 4 done the same day: contacts (decision 39); all 1412 household cards
 edit losslessly; checked in Chromium with 1500 synthetic contacts. 171
-workspace tests.
+workspace tests. Step 5 done the same day: reminders on view-only
+calendars, the calendar list with sharing, preferences, every page in
+Dutch and English, phone navigation (decision 40). 175 workspace tests.
+Step 6 done the same day: ICS feeds both ways (decision 41), migration
+`0009_feeds.sql`. 185 workspace tests.
 
 ## Architecture
 
@@ -128,12 +132,15 @@ delete, changes_since; `app_passwords`: create, list, revoke, verify;
 `accounts`: passphrases, admins, sessions; `imports`: reports;
 `two_factor`: TOTP, recovery codes, secrets at rest; `prefs`: settings;
 `events`: occurrences, writes, undo; `contacts`: list, detail, writes,
-photos), `import`
+photos; `feeds`: secret links and the published feed; `subscriptions`:
+subscribed calendars, schedule, `replace`), `feeds` (the SSRF-guarded
+fetcher and the refresher task), `import`
 (`Run`: files and Takeout zips; `baikal`: the CalDAV/CardDAV reader;
 `digest`), `export` (zip, one collection), `dav` (`auth`: Basic; `props`:
 live properties; handlers), `web` (`session`, `pages`, `collections`,
 `passwords`, `admin`, `transfer`, `two_factor`, `api` (JSON for the
-calendar page), `calendar` (the page and the event panel), `contacts`,
+calendar page), `calendar` (the page and the event panel), `contacts`, `feeds`
+(`/feeds/<token>.ics` and the link and subscription endpoints),
 `i18n`
 (languages and every string); askama templates in `templates/`, assets in
 `static/`), `migrations/` (numbered SQL, embedded, run at every start).
@@ -148,7 +155,7 @@ Occurrence, Warning), `vtimezone` (VZone), `split` (split, merge,
 UserLayer), `import` (decode, split_calendar, split_cards, assemble),
 `moment` (Moment, Key, VTIMEZONE generation), `edit` (EventChange, Scope,
 edit, delete, new_event), `quickadd` (parse, Lang), `card` (read, apply,
-new_card). Per-user items: VALARM, `X-MOZ-LASTACK`, `X-MOZ-SNOOZE-TIME`
+new_card), `feed` (object_for_feed, publish: full or busy-only). Per-user items: VALARM, `X-MOZ-LASTACK`, `X-MOZ-SNOOZE-TIME`
 and `X-MOZ-SNOOZE-TIME-*`; `X-MOZ-GENERATION` stays shared.
 
 Pins follow wordwarz-server unless a decision here says otherwise: rust 1.92,
@@ -696,9 +703,9 @@ Settled 2026-11-06:
       `color-scheme: inherit`, map its `--ec-*` and grey scale to our
       tokens, and set its polyfill pair from `data-theme`.
     - **Translations:** `web::i18n::T`, one struct per language, also sent
-      to the script as JSON. Translated now: base, navigation, login, the
-      code step, the calendar page and panel. The older admin pages follow
-      in step 5.
+      to the script as JSON. Translated at first: base, navigation, login,
+      the code step, the calendar page and panel; everything else in step 5
+      (decision 40).
     - **Owners show as initials** of their display name on events in
       calendars the viewer does not own.
 39. **Contacts (phase 2 step 4, 2026-11-06).**
@@ -732,6 +739,89 @@ Settled 2026-11-06:
       saving the whole contact.
     - **Photos:** inline JPEG, PNG, GIF and WebP are served from
       `/contacts/photo/...`; links in a card are never fetched.
+40. **My layer, sharing and every page in two languages (phase 2 step 5,
+    2026-11-06).**
+    - **Reminders on calendars you can only view:** a reminder-only change
+      goes through `events::update_reminders`:
+      - the core's `edit::set_alarms` touches only VALARMs, no stamps;
+      - the server stores it only if the shared object comes out byte for
+        byte the same, so it is allowed with view access, covers every
+        occurrence, and can be undone;
+      - undo without write access is allowed exactly when it restores
+        layers only.
+      The panel keeps the reminder menu outside the disabled fields and
+      skips the scope question for reminder-only saves.
+    - **The calendar list:** beside the grid on a desk (folded away with
+      the Calendars button, remembered per browser), above it on a phone.
+      - A checkbox shows or hides a calendar.
+      - "⋯" opens the settings sheet: my name, my colour (stored only when
+        actually picked, so you otherwise follow the calendar's own) and my
+        default reminder.
+      - When you may share it, the sheet also holds sharing, through the
+        existing share endpoints.
+    - **Settings has Preferences:** language (or the browser's), theme,
+      time zone (every IANA zone), first day of the week, 12- or 24-hour
+      clock.
+    - **Every page is translated (decision 35):**
+      - the admin pages' strings are `i18n::A` (`nav.a`), generated with
+        `T` from one list, so both languages always have every field;
+      - handler messages use the person's table;
+      - generic domain errors (not found, read-only, name taken, bad name,
+        server, admin only) carry a key that the guard translates in the
+        reader's language (their setting, else the browser's), and the
+        plain error page is translated too;
+      - a test renders every page for a Dutch user and fails on common
+        English words.
+    - **Phone navigation:** Calendar and Contacts in the bar, the rest
+      behind "More". "Calendars & contacts" is now "Calendars & address
+      books".
+
+41. **ICS feeds (phase 2 step 6, 2026-11-06),** decision 24 built.
+    - **Links:** whoever may share a calendar makes links from its
+      settings sheet, with a label and a detail level. The token is 256
+      random bits (base64url), shown once with an `https://` and a
+      `webcal://` copy button; only its SHA-256 is stored
+      (`feed_links`). The sheet lists label, detail, made and last used;
+      removing a link is immediate. A disabled owner's feeds stop.
+    - **The feed** (`GET /feeds/<token>.ics`, no session, DAV door
+      independent): events only, from shared bodies, so nobody's
+      reminders. Busy-only keeps identity, times, recurrence and status,
+      titles every entry "Busy" (in the language of whoever made the link,
+      since feed readers send none) and leaves out free and cancelled
+      events; overrides always stay, or the original occurrence would come
+      back. A full feed publishes `CLASS:PRIVATE` or `CONFIDENTIAL` events
+      busy-only. ETag `"<sequence>-<detail>"`, `Last-Modified`, 304,
+      `noindex`.
+    - **Subscribing:** "+ Subscribe to a calendar" under the calendar list
+      takes an address (`webcal://` means https), an optional name (else
+      the feed's `X-WR-CALNAME`, else the host) and an interval (15 min,
+      hour, 6 hours, day). The address is fetched before anything is made,
+      and a copy that does not read completely makes no calendar.
+    - **Read-only:** a subscribed calendar is a normal calendar with a
+      `subscriptions` row; the object lock downgrades everyone to read
+      (DAV privileges, the API and the panel follow). Its owner may still
+      rename, recolour, share and delete it, and everyone keeps their own
+      reminders on it.
+    - **Refreshes** (a task every minute, ten due at a time, or "Refresh
+      now") send `If-None-Match` / `If-Modified-Since`, and replace the
+      copy in one transaction only when every entry was accepted by the
+      store and there is at least one: new and changed UIDs are stored
+      (named after a hash of the UID), missing ones deleted, unchanged ones
+      left alone. Refreshes store the shared part only, so people's own
+      reminders survive (the feed's alarms are dropped). Failures keep the
+      copy, show on the sheet in the reader's language, and back off:
+      double the interval per failure in a row, at most a day.
+    - **The guard** (`server::feeds`): resolve once and check every
+      address (no loopback, private, link-local, CGNAT, multicast,
+      unspecified, NAT64 or v4-mapped private addresses), pin the
+      connection to the checked address, follow at most 3 redirects by
+      hand and check each, 10 s to connect, 30 s and 10 MiB in all, no
+      user name or password in the address. `CALZONE_FEEDS_ALLOW_PRIVATE=on`
+      lifts the address check for a feed on the LAN (default off).
+    - **Errors are fixed English sentences** without content (stored as
+      `last_error`), translated when shown. A failed refresh answers 422,
+      not 502, so the access log does not report an outside feed's
+      trouble as a server error.
 
 ## Roadmap
 

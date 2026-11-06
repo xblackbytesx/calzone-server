@@ -25,10 +25,10 @@ use crate::domain::{CollectionKind, DomainError, collections};
 /// The widest range one request may ask for.
 const MAX_RANGE_DAYS: i64 = 400;
 
-pub struct ApiError(StatusCode, String);
+pub struct ApiError(pub(super) StatusCode, pub(super) String);
 
 impl ApiError {
-    fn bad(msg: impl Into<String>) -> Self {
+    pub(super) fn bad(msg: impl Into<String>) -> Self {
         ApiError(StatusCode::BAD_REQUEST, msg.into())
     }
 }
@@ -56,7 +56,7 @@ impl From<DomainError> for ApiError {
     }
 }
 
-type ApiResult<T> = Result<Json<T>, ApiError>;
+pub(super) type ApiResult<T> = Result<Json<T>, ApiError>;
 
 /// The viewer's zone: their setting, else the server default.
 async fn viewer(st: &AppState, user: uuid::Uuid) -> Result<(chrono_tz::Tz, prefs::Settings), ApiError> {
@@ -176,6 +176,20 @@ pub async fn update(
     Path((collection, name)): Path<(Uuid, String)>,
     Json(b): Json<UpdateBody>,
 ) -> ApiResult<Saved> {
+    // Only reminders: the person's own layer, for every occurrence, also on
+    // a calendar they can only view (no scope, no shared change).
+    let c = &b.change;
+    if let Some(alarms) = &c.alarms
+        && c.summary.is_none()
+        && c.location.is_none()
+        && c.description.is_none()
+        && c.start.is_none()
+        && c.end.is_none()
+        && c.rrule.is_none()
+    {
+        b.change.input()?;
+        return Ok(Json(events::update_reminders(&st.pool, u.id(), collection, &name, &b.etag, alarms).await?));
+    }
     let (tz, _) = viewer(&st, u.id()).await?;
     let saved = events::update(
         &st.pool,
@@ -347,6 +361,7 @@ pub struct CalendarView {
     own: bool,
     owner: String,
     writable: bool,
+    subscribed: bool,
     hidden: bool,
     sort_order: Option<i32>,
     default_alarm: Option<i32>,
@@ -368,7 +383,8 @@ pub async fn calendars(State(st): State<AppState>, ApiUser(u): ApiUser) -> ApiRe
                 color: p.color.or(c.color).unwrap_or_else(|| events::DEFAULT_COLOR.into()),
                 own: c.owner_id == u.id(),
                 owner: c.owner_name,
-                writable: c.access.can_write(),
+                writable: c.access.can_write() && !c.subscribed,
+                subscribed: c.subscribed,
                 hidden: p.hidden,
                 sort_order: p.sort_order,
                 default_alarm: p.default_alarm,

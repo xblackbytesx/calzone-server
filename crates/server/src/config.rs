@@ -22,6 +22,9 @@ pub struct Config {
     pub secret_key: Option<[u8; 32]>,
     /// `CALZONE_TWO_FACTOR`: who must use two-factor sign-in.
     pub two_factor: TwoFactorPolicy,
+    /// `CALZONE_FEEDS_ALLOW_PRIVATE`: let subscriptions fetch from private
+    /// and loopback addresses (a feed on the home network). Off by default.
+    pub feeds_allow_private: bool,
     /// `CALZONE_DEFAULT_TIMEZONE`: for people who have not set theirs yet
     /// (the calendar page sends the browser's). Default UTC.
     pub default_timezone: chrono_tz::Tz,
@@ -84,6 +87,11 @@ impl Config {
             behind_proxy: switch("CALZONE_BEHIND_PROXY", var("CALZONE_BEHIND_PROXY").as_deref(), false)?,
             secret_key: secret_key(var("CALZONE_SECRET_KEY").as_deref())?,
             two_factor: TwoFactorPolicy::parse(var("CALZONE_TWO_FACTOR").as_deref())?,
+            feeds_allow_private: switch(
+                "CALZONE_FEEDS_ALLOW_PRIVATE",
+                var("CALZONE_FEEDS_ALLOW_PRIVATE").as_deref(),
+                false,
+            )?,
             default_timezone: match var("CALZONE_DEFAULT_TIMEZONE") {
                 None => chrono_tz::UTC,
                 Some(v) => {

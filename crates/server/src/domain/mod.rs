@@ -12,10 +12,12 @@ pub mod app_passwords;
 pub mod collections;
 pub mod contacts;
 pub mod events;
+pub mod feeds;
 pub mod imports;
 pub mod objects;
 pub mod prefs;
 pub mod principals;
+pub mod subscriptions;
 pub mod two_factor;
 
 pub use access::Access;

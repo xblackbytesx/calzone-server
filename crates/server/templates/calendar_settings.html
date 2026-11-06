@@ -1,0 +1,80 @@
+<div class="sheet" role="dialog" aria-modal="false" aria-labelledby="cs-heading">
+  <header class="sheet-header">
+    <h2 id="cs-heading">{{ t.calendar_settings }}</h2>
+    <button type="button" class="quiet compact" data-cal="close">{{ t.close }}</button>
+  </header>
+  <p class="meta sheet-meta"><svg class="swatch" viewBox="0 0 1 1" aria-hidden="true"><rect width="1" height="1" fill="{{ color }}"/></svg> {{ base_name }}{% if !own %} · {{ t.from_owner }} {{ owner }} · {{ t.you_can }} {{ level }}{% endif %}</p>
+  <form id="cal-prefs" class="form" data-id="{{ id }}" data-color="{{ color }}">
+    <label class="field">{{ t.my_name }} <span class="hint">{{ t.my_name_hint }}</span>
+      <input type="text" name="display_name" value="{{ my_name }}" placeholder="{{ base_name }}" maxlength="100"></label>
+    <label class="field">{{ t.my_color }} <input type="color" name="color" value="{{ color }}"></label>
+    <label class="field">{{ t.default_reminder }} <span class="hint">{{ t.default_reminder_hint }}</span>
+      <select name="default_alarm">
+        <option value="none"{% if alarm_value == "none" %} selected{% endif %}>{{ t.reminder_none }}</option>
+        {% for (v, label) in alarms %}<option value="{{ v }}"{% if alarm_value == *v %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
+    <div class="form-actions"><button type="submit" class="primary">{{ t.save }}</button></div>
+  </form>
+  {% if let Some(s) = sub %}
+  <section class="sheet-section" id="cal-sub" data-id="{{ id }}">
+    <h3>{{ t.subscription_h }}</h3>
+    <p class="hint">{{ t.read_only_feed }}</p>
+    <p class="meta">{{ s.host }} · {{ t.last_refresh }}: {{ s.last_refresh }}</p>
+    {% if !s.error.is_empty() %}<p class="notice error">{{ t.last_error }} {{ s.error }}</p>{% endif %}
+    {% if s.can_admin %}
+    <label class="field">{{ t.refresh_every }}
+      <select name="interval" data-cal-interval>{% for (m, label) in s.intervals %}<option value="{{ m }}"{% if s.interval == *m %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <div class="form-actions">
+      <button type="button" class="primary" data-cal="sub-refresh">{{ t.refresh_now }}</button>
+      <button type="button" class="danger" data-cal="sub-delete">{{ t.unsubscribe }}</button>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+  {% if can_admin && sub.is_none() %}
+  <section class="sheet-section" id="cal-links" data-id="{{ id }}">
+    <h3>{{ t.links_h }}</h3>
+    <p class="hint">{{ t.links_hint }}</p>
+    {% if !links.is_empty() %}
+    <ul class="rows">
+      {% for l in links %}<li><div class="row-main"><span class="row-title">{% if l.label.is_empty() %}{{ l.detail }}{% else %}{{ l.label }}{% endif %}</span><span class="meta">{{ l.detail }} · {{ l.created }} · {{ t.last_used }}: {{ l.last_used }}</span></div>
+        <div class="row-actions"><button type="button" class="quiet compact" data-cal="revoke-link" data-id="{{ l.id }}">{{ t.revoke_link }}</button></div></li>{% endfor %}
+    </ul>{% endif %}
+    <div class="cal-link-made" hidden>
+      <p class="notice">{{ t.link_made }}</p>
+      <div class="field-row"><input type="text" readonly data-link="webcal" aria-label="webcal"><button type="button" class="quiet compact" data-cal="copy" data-copy="webcal">{{ t.copy_link }}</button></div>
+      <div class="field-row"><input type="text" readonly data-link="url" aria-label="https"><button type="button" class="quiet compact" data-cal="copy" data-copy="url">{{ t.copy_link }}</button></div>
+    </div>
+    <form id="cal-link" class="form" autocomplete="off">
+      <div class="field-row">
+        <input type="text" name="label" maxlength="100" placeholder="{{ t.link_label_placeholder }}" aria-label="{{ t.link_label }}">
+        <select name="detail" aria-label="{{ t.links_h }}"><option value="busy" selected>{{ t.detail_busy }}</option><option value="full">{{ t.detail_full }}</option></select>
+        <button type="submit" class="primary">{{ t.make_link }}</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+  {% if can_admin %}
+  <section class="sheet-section">
+    <h3>{{ t.shared_with }}</h3>
+    {% if grants.is_empty() %}<p class="empty">{{ t.only_owner }}</p>{% else %}
+    <ul class="rows">
+      {% for g in grants %}<li><div class="row-main"><span class="row-title">{{ g.label }}</span><span class="meta">{{ g.level }}</span></div>
+        <div class="row-actions"><form class="cal-share" method="post" action="/collections/{{ id }}/unshare/{{ g.id }}"><button type="submit" class="quiet compact">{{ t.stop_sharing }}</button></form></div></li>{% endfor %}
+    </ul>{% endif %}
+    {% if !candidates.is_empty() %}
+    <form class="cal-share form" method="post" action="/collections/{{ id }}/share">
+      <div class="field-row">
+        <select name="principal" aria-label="{{ t.person_or_group }}">{% for (pid, label) in candidates %}<option value="{{ pid }}">{{ label }}</option>{% endfor %}</select>
+        <select name="level" aria-label="{{ t.what_they_may_do }}">
+          <option value="read">{{ t.can_view }}</option>
+          <option value="write" selected>{{ t.can_edit }}</option>
+          <option value="admin">{{ t.can_share }}</option>
+        </select>
+        <button type="submit" class="primary">{{ t.share }}</button>
+      </div>
+    </form>{% endif %}
+    <p><a href="/collections/{{ id }}">{{ t.manage_calendar }}</a></p>
+  </section>
+  {% endif %}
+</div>

@@ -39,6 +39,9 @@ pub struct Collection {
     pub components: Vec<String>,
     /// The change log's head: the sync token and CTag.
     pub sequence: i64,
+    /// Filled from an outside `.ics` (decision 24): read-only for everyone,
+    /// whatever their access.
+    pub subscribed: bool,
     /// The asking actor's access.
     pub access: Access,
 }
@@ -53,10 +56,9 @@ pub struct NewCollection<'a> {
     pub components: &'a [&'a str],
 }
 
-type Row = (Uuid, Uuid, String, String, String, String, String, Option<String>, Vec<String>, i64, Option<i32>);
+type Row = (Uuid, Uuid, String, String, String, String, String, Option<String>, Vec<String>, i64, bool, Option<i32>);
 
-const COLUMNS: &str =
-    "c.id, c.owner_id, o.name, c.kind, c.slug, c.display_name, c.description, c.color, c.components, c.sequence";
+const COLUMNS: &str = "c.id, c.owner_id, o.name, c.kind, c.slug, c.display_name, c.description, c.color, c.components, c.sequence, EXISTS (SELECT 1 FROM subscriptions s WHERE s.collection_id = c.id)";
 
 fn from_row(r: Row) -> Option<Collection> {
     Some(Collection {
@@ -70,7 +72,8 @@ fn from_row(r: Row) -> Option<Collection> {
         color: r.7,
         components: r.8,
         sequence: r.9,
-        access: access::from_number(r.10)?,
+        subscribed: r.10,
+        access: access::from_number(r.11)?,
     })
 }
 

@@ -5,6 +5,7 @@
 <div class="cal" id="cal-app" data-strings="{{ strings }}" data-config="{{ config }}" hx-boost="false">
   <div class="cal-toolbar">
     <div class="cal-nav">
+      <button type="button" class="compact quiet cal-list-toggle" data-cal="list" aria-controls="cal-list" aria-expanded="true">{{ nav.t.calendars }}</button>
       <button type="button" class="compact" data-cal="today">{{ nav.t.today }}</button>
       <button type="button" class="compact quiet" data-cal="prev" aria-label="{{ nav.t.previous }}">‹</button>
       <button type="button" class="compact quiet" data-cal="next" aria-label="{{ nav.t.next }}">›</button>
@@ -24,7 +25,19 @@
     {% endif %}
   </div>
   {% if !has_calendar %}<p class="notice">{{ nav.t.no_calendar }}</p>{% endif %}
-  <div id="cal-grid" class="cal-grid"></div>
+  <div class="cal-body" id="cal-body">
+    <aside id="cal-list" class="cal-list" aria-label="{{ nav.t.calendars }}">
+      <ul class="cal-cals">
+        {% for c in list %}<li data-cal-id="{{ c.id }}" data-prefs="{{ c.prefs }}">
+          <label class="cal-check"><input type="checkbox" data-cal-show{% if !c.hidden %} checked{% endif %} aria-label="{{ nav.t.show_calendar }}: {{ c.name }}"><svg class="swatch" viewBox="0 0 1 1" aria-hidden="true"><rect width="1" height="1" fill="{{ c.color }}"/></svg><span class="cal-cal-name">{{ c.name }}</span>{% if c.subscribed %}<span class="cal-sub-mark" title="{{ nav.t.subscribed_badge }}" aria-label="{{ nav.t.subscribed_badge }}">↻</span>{% endif %}{% if !c.own %}<span class="cal-ev-who" title="{{ nav.t.from_owner }} {{ c.owner }}">{{ c.owner_initials }}</span>{% endif %}</label>
+          <button type="button" class="quiet compact cal-cal-more" data-cal="cal-settings" data-id="{{ c.id }}" aria-label="{{ nav.t.calendar_settings }}: {{ c.name }}">⋯</button>
+        </li>{% endfor %}
+      </ul>
+      <a class="button quiet compact" href="/collections">+ {{ nav.t.new_calendar }}</a>
+      <button type="button" class="quiet compact" data-cal="subscribe">+ {{ nav.t.subscribe }}</button>
+    </aside>
+    <div id="cal-grid" class="cal-grid"></div>
+  </div>
   <p class="hint cal-keys">{{ nav.t.shortcuts }}</p>
 </div>
 <div id="cal-panel" class="cal-panel" hidden hx-boost="false"></div>

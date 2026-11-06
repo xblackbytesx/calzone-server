@@ -9,10 +9,12 @@
 //! - [`moment`], [`edit`]: times as properties write them; lossless event edits.
 //! - [`card`]: contacts read into their fields and edited losslessly.
 //! - [`quickadd`]: "dentist thu 3pm" / "tandarts do 15u" into a draft event.
+//! - [`feed`]: a calendar as a published `.ics`, full or busy-only.
 //! - [`import`]: `.ics`/`.vcf` files split into objects and assembled back.
 
 pub mod card;
 pub mod edit;
+pub mod feed;
 pub mod import;
 pub mod lines;
 pub mod moment;

@@ -1,14 +1,14 @@
 {% extends "layout.html" %}
-{% block title %}Device added · CalZone{% endblock %}
+{% block title %}{{ label }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>{{ label }} is ready</h1><p class="meta">Enter these on the device now. The password is shown only this once.</p></div></header>
+<header class="page-header"><div><h1>{{ label }} {{ nav.a.device_ready }}</h1><p class="meta">{{ nav.a.device_ready_meta }}</p></div></header>
 <section class="panel">
   <dl class="facts">
-    <dt>Server</dt><dd><div class="copy-line"><code id="server">{{ server }}</code><button type="button" class="compact" data-copy="#server">Copy</button></div></dd>
-    <dt>User name</dt><dd><div class="copy-line"><code id="user">{{ user_name }}</code><button type="button" class="compact" data-copy="#user">Copy</button></div></dd>
-    <dt>Password</dt><dd><div class="copy-line"><code id="password">{{ password }}</code><button type="button" class="compact" data-copy="#password">Copy</button></div></dd>
+    <dt>{{ nav.a.server }}</dt><dd><div class="copy-line"><code id="server">{{ server }}</code><button type="button" class="compact" data-copy="#server">{{ nav.a.copy }}</button></div></dd>
+    <dt>{{ nav.a.user_name }}</dt><dd><div class="copy-line"><code id="user">{{ user_name }}</code><button type="button" class="compact" data-copy="#user">{{ nav.a.copy }}</button></div></dd>
+    <dt>{{ nav.a.password }}</dt><dd><div class="copy-line"><code id="password">{{ password }}</code><button type="button" class="compact" data-copy="#password">{{ nav.a.copy }}</button></div></dd>
   </dl>
-  <p class="hint">In DAVx5 choose "Login with URL and user name". Capitals, spaces and dashes in the password do not matter.</p>
-  <a class="button primary" href="/devices">Done</a>
+  <p class="hint">{{ nav.a.davx5_hint }}</p>
+  <a class="button primary" href="/devices">{{ nav.a.done }}</a>
 </section>
 {% endblock %}

@@ -228,6 +228,27 @@
   @container header (inline-size > 52rem) {
     .sections { order: 0; flex: 1 1 0; }
   }
+  /* Phone: Calendar and Contacts, the rest behind "More". */
+  .sections-wide { display: none; }
+  .sections-more { position: relative; }
+  .sections-more > summary {
+    display: inline-flex; align-items: center; min-block-size: var(--tap); padding-inline: var(--space-2xs);
+    border-radius: var(--radius-s); color: var(--text-quiet); cursor: pointer; list-style: none;
+  }
+  .sections-more > summary::-webkit-details-marker { display: none; }
+  .sections-more > summary::after { content: "▾"; margin-inline-start: 0.3em; font-size: 0.8em; }
+  .sections-more[open] > summary { background: var(--surface-sunken); color: var(--text); }
+  .sections-menu {
+    /* Opens from the button's end, so it stays on a phone's screen. */
+    position: absolute; z-index: 40; inset-block-start: calc(100% + var(--space-3xs)); inset-inline-end: 0;
+    display: grid; min-inline-size: 14rem; padding: var(--space-3xs); border: var(--hairline); border-radius: var(--radius-m);
+    background: var(--surface); box-shadow: 0 0.5rem 1.5rem color-mix(in oklab, black 30%, transparent);
+  }
+  .sections-menu a { white-space: nowrap; }
+  @container header (inline-size > 52rem) {
+    .sections-wide { display: contents; }
+    .sections-more { display: none; }
+  }
 
   /* Pages. */
   .page {
@@ -418,19 +439,48 @@
   /* ---- The calendar page (phase 2 step 3) ---- */
   /* Full width: the grid is the page. */
   .page.calendar-page { max-inline-size: none; padding-block-end: var(--space-2xs); }
-  .cal { display: grid; gap: var(--space-2xs); grid-template-rows: auto auto 1fr auto; }
+  /* minmax(0, 1fr): the calendar never grows wider than the screen. */
+  .cal { display: grid; gap: var(--space-2xs); grid-template-columns: minmax(0, 1fr); }
   .cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); }
   .cal-nav { display: flex; align-items: center; gap: var(--space-3xs); flex: 1 1 auto; min-inline-size: 0; }
-  .cal-title { font-size: var(--step-1); margin-inline-start: var(--space-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-title { flex: 1 1 auto; min-inline-size: 0; font-size: var(--step-1); margin-inline-start: var(--space-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-views { display: flex; gap: 0; border: var(--hairline); border-radius: var(--radius-s); overflow: hidden; }
   .cal-views button { border: 0; border-radius: 0; background: transparent; color: var(--text-quiet); }
   .cal-views button[aria-pressed=true] { background: var(--accent-tint); color: var(--text); font-weight: 600; }
   .cal-quick { flex: 1 1 14rem; display: flex; }
   .cal-quick input { inline-size: 100%; }
   .cal-grid { block-size: max(26rem, calc(100dvb - 13rem)); min-inline-size: 0; }
+
+  /* The calendar list: beside the grid on a desk, above it on a phone, and
+     folded away either way with the Calendars button. */
+  .cal-body { display: grid; gap: var(--space-xs); grid-template-columns: minmax(0, 1fr); }
+  .cal-body.list-closed .cal-list { display: none; }
+  @media (min-width: 64rem) {
+    .cal-body { grid-template-columns: 15rem minmax(0, 1fr); align-items: start; }
+    .cal-body.list-closed { grid-template-columns: minmax(0, 1fr); }
+  }
+  .cal-list { display: grid; gap: var(--space-2xs); align-content: start; justify-items: start; min-inline-size: 0; padding: var(--space-2xs); border: var(--hairline); border-radius: var(--radius-m); background: var(--surface); }
+  .cal-list > .cal-cals { justify-self: stretch; }
+  .cal-cals { list-style: none; padding: 0; display: grid; gap: 0; }
+  .cal-cals > li { display: flex; align-items: center; gap: var(--space-3xs); }
+  .cal-check { flex: 1 1 auto; display: flex; align-items: center; gap: var(--space-2xs); min-block-size: var(--tap); min-inline-size: 0; font-weight: 400; cursor: pointer; }
+  .cal-check > input { flex: none; }
+  /* min-inline-size: 0 lets a long name shrink (with an ellipsis) instead
+     of pushing the settings button out of the list. */
+  .cal-cal-name { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-check > .cal-ev-who { flex: none; align-self: center; }
+  .cal-sub-mark { flex: none; color: var(--text-quiet); }
+  .cal-link-made { display: grid; gap: var(--space-2xs); }
+  .cal-link-made input { font-family: var(--font-mono); font-size: var(--step--1); }
+  .cal-cal-more { flex: none; }
+  .cal-list-toggle[aria-expanded=true] { background: var(--accent-tint); color: var(--text); }
+  .sheet-section { display: grid; gap: var(--space-2xs); padding-block-start: var(--space-xs); border-block-start: var(--hairline); }
   .cal-keys { display: none; }
   @media (min-width: 64rem) { .cal-keys { display: block; } }
   @media (max-width: 40rem) {
+    /* The month on its own line above the buttons. */
+    .cal-nav { flex-wrap: wrap; }
+    .cal-title { order: -1; flex-basis: 100%; margin-inline-start: 0; }
     .cal-new-text { display: none; }
     .cal-quick { order: 5; flex-basis: 100%; }
     .cal-grid { block-size: max(24rem, calc(100dvb - 15rem)); }

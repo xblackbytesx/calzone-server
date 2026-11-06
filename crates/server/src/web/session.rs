@@ -207,9 +207,11 @@ impl IntoResponse for AdminRejection {
     fn into_response(self) -> Response {
         match self {
             AdminRejection::Login(l) => l.into_response(),
-            AdminRejection::Forbidden => {
-                WebError::new(StatusCode::FORBIDDEN, "Only an admin can do that.").into_response()
+            AdminRejection::Forbidden => WebError {
+                key: Some("admin_only"),
+                ..WebError::new(StatusCode::FORBIDDEN, "Only an admin can do that.")
             }
+            .into_response(),
         }
     }
 }

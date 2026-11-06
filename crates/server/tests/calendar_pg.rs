@@ -397,7 +397,9 @@ async fn the_calendar_page_and_its_panel() {
         panel.contains(r#"<option value="none" selected>"#)
             && panel.contains("fieldset class=\"sheet-fields\" disabled")
     );
-    assert!(!panel.contains("type=\"submit\" class=\"primary\"") && panel.contains("From anna"));
+    assert!(
+        panel.contains("Save my reminder") && panel.contains("From anna") && !panel.contains("data-cal=\"delete\"")
+    );
     // A new event at a grid slot; all-day ranges show their last day.
     let (_, panel) = anna.page("/calendar/event/new?start=2026-01-07T14:00").await;
     assert!(panel.contains(r#"name="start_time" value="14:00""#) && panel.contains(r#"name="end_time" value="15:00""#));
@@ -412,5 +414,60 @@ async fn the_calendar_page_and_its_panel() {
     // The old home goes to the calendar.
     let r = send(&app, "GET", "/", None, &[("cookie", anna.cookie.as_str())], "").await;
     assert_eq!(r.header("location").as_deref(), Some("/calendar"));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn readers_set_their_own_reminders() {
+    let Some(db) = Db::new().await else { return };
+    let app = db.app();
+    let (anna, anna_id) = Who::new(&db, &app, "anna").await;
+    let (bob, bob_id) = Who::new(&db, &app, "bob").await;
+    let cal = family(&db, anna_id).await;
+    collections::set_grant(&db.pool, anna_id, cal, bob_id, Some(Access::Read)).await.unwrap();
+    for w in [&anna, &bob] {
+        w.post("/api/settings", json!({ "timezone": "Europe/Amsterdam" })).await;
+    }
+    let (_, saved) = anna
+        .post("/api/events", json!({ "collection": cal, "summary": "Swim", "start": "2026-01-05T09:00", "rrule": "FREQ=WEEKLY", "alarms": [15] }))
+        .await;
+    let name = saved["name"].as_str().unwrap().to_string();
+    let path = format!("/api/events/{cal}/{name}");
+    let shared = || async {
+        sqlx::query_scalar::<_, String>("SELECT body FROM objects WHERE name = $1")
+            .bind(&name)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap()
+    };
+    let before = shared().await;
+    let evs = bob.month().await;
+    let etag = evs[0]["etag"].as_str().unwrap();
+    // Bob can only view, yet sets his reminder (an occurrence named: still every one).
+    let (s, r) =
+        bob.post(&path, json!({ "etag": etag, "instance": "20260112T090000", "scope": "this", "alarms": [60] })).await;
+    assert_eq!(s, StatusCode::OK, "{r}");
+    assert_eq!(shared().await, before, "the shared event is untouched");
+    let b = body(&db, bob_id, cal, &name).await;
+    assert!(b.contains("TRIGGER:-PT1H") && !b.contains("PT15M"));
+    let a = body(&db, anna_id, cal, &name).await;
+    assert!(a.contains("TRIGGER:-PT15M") && !a.contains("PT1H"), "Anna keeps hers");
+    // Anything more than reminders is still refused.
+    let etag2 = r["etag"].as_str().unwrap();
+    assert_eq!(
+        bob.post(&path, json!({ "etag": etag2, "summary": "Mine", "alarms": [5] })).await.0,
+        StatusCode::FORBIDDEN
+    );
+    // Anna's later edit keeps Bob's reminder; Bob can undo his.
+    let (_, ed) = anna.post(&path, json!({ "etag": etag2, "summary": "Swim club" })).await;
+    assert!(ed["etag"].is_string());
+    assert!(body(&db, bob_id, cal, &name).await.contains("TRIGGER:-PT1H"));
+    let (_, again) = bob.post(&path, json!({ "etag": ed["etag"], "alarms": [] })).await;
+    assert!(!body(&db, bob_id, cal, &name).await.contains("VALARM"));
+    assert_eq!(
+        bob.post(&format!("/api/undo/{}", again["change_id"].as_str().unwrap()), json!({})).await.0,
+        StatusCode::OK
+    );
+    assert!(body(&db, bob_id, cal, &name).await.contains("TRIGGER:-PT1H"));
     db.drop().await;
 }

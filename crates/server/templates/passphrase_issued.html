@@ -1,13 +1,13 @@
 {% extends "layout.html" %}
-{% block title %}Temporary passphrase · CalZone{% endblock %}
+{% block title %}{{ nav.a.passphrase_for }} {{ who }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>A passphrase for {{ who }}</h1><p class="meta">Give it to them in person. It is shown only this once, and they should change it under Settings after signing in.</p></div></header>
+<header class="page-header"><div><h1>{{ nav.a.passphrase_for }} {{ who }}</h1><p class="meta">{{ nav.a.passphrase_meta }}</p></div></header>
 <section class="panel">
   <dl class="facts">
-    <dt>Address</dt><dd><code>{{ server }}</code></dd>
-    <dt>Name</dt><dd><code>{{ name }}</code></dd>
-    <dt>Passphrase</dt><dd><div class="copy-line"><code id="passphrase">{{ passphrase }}</code><button type="button" class="compact" data-copy="#passphrase">Copy</button></div></dd>
+    <dt>{{ nav.a.address }}</dt><dd><code>{{ server }}</code></dd>
+    <dt>{{ nav.t.name }}</dt><dd><code>{{ name }}</code></dd>
+    <dt>{{ nav.a.passphrase_h }}</dt><dd><div class="copy-line"><code id="passphrase">{{ passphrase }}</code><button type="button" class="compact" data-copy="#passphrase">{{ nav.a.copy }}</button></div></dd>
   </dl>
-  <a class="button primary" href="/admin/people">Done</a>
+  <a class="button primary" href="/admin/people">{{ nav.a.done }}</a>
 </section>
 {% endblock %}

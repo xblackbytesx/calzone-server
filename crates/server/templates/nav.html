@@ -4,10 +4,22 @@
     <nav class="sections" aria-label="{{ nav.t.nav_sections }}">
       <a href="/calendar" aria-current="{{ nav.on("calendar") }}">{{ nav.t.nav_calendar }}</a>
       <a href="/contacts" aria-current="{{ nav.on("contacts") }}">{{ nav.t.nav_contacts }}</a>
-      <a href="/collections" aria-current="{{ nav.on("collections") }}">{{ nav.t.nav_manage }}</a>
-      <a href="/import" aria-current="{{ nav.on("import") }}">{{ nav.t.nav_import }}</a>
-      {% if nav.dav %}<a href="/devices" aria-current="{{ nav.on("devices") }}">{{ nav.t.nav_devices }}</a>{% endif %}
-      {% if nav.admin %}<a href="/admin/people" aria-current="{{ nav.on("people") }}">{{ nav.t.nav_people }}</a>{% endif %}
+      {#- On a wide screen the rest sit in the bar; on a phone behind "More". -#}
+      <span class="sections-wide">
+        <a href="/collections" aria-current="{{ nav.on("collections") }}">{{ nav.t.nav_manage }}</a>
+        <a href="/import" aria-current="{{ nav.on("import") }}">{{ nav.t.nav_import }}</a>
+        {% if nav.dav %}<a href="/devices" aria-current="{{ nav.on("devices") }}">{{ nav.t.nav_devices }}</a>{% endif %}
+        {% if nav.admin %}<a href="/admin/people" aria-current="{{ nav.on("people") }}">{{ nav.t.nav_people }}</a>{% endif %}
+      </span>
+      <details class="sections-more">
+        <summary>{{ nav.t.nav_more }}</summary>
+        <div class="sections-menu">
+          <a href="/collections" aria-current="{{ nav.on("collections") }}">{{ nav.t.nav_manage }}</a>
+          <a href="/import" aria-current="{{ nav.on("import") }}">{{ nav.t.nav_import }}</a>
+          {% if nav.dav %}<a href="/devices" aria-current="{{ nav.on("devices") }}">{{ nav.t.nav_devices }}</a>{% endif %}
+          {% if nav.admin %}<a href="/admin/people" aria-current="{{ nav.on("people") }}">{{ nav.t.nav_people }}</a>{% endif %}
+        </div>
+      </details>
     </nav>
     <div class="account">
       <a href="/settings" aria-current="{{ nav.on("settings") }}">{{ nav.label }}</a>

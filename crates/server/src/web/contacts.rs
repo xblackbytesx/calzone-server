@@ -471,8 +471,11 @@ pub async fn edit_form(State(st): State<AppState>, user: WebUser, Path((c, n)): 
 /// (`phone_kind`, `phone`, ...). The birthday changes only when it differs
 /// from what the form showed (`birthday_was`), so a birthday without a year
 /// is never lost by saving.
-fn change_from(body: &[u8]) -> Result<(CardChange, std::collections::HashMap<String, String>), WebError> {
-    let pairs: Vec<(String, String)> = serde_urlencoded::from_bytes(body).map_err(|_| WebError::bad("Bad form."))?;
+fn change_from(
+    body: &[u8],
+    a: &'static i18n::A,
+) -> Result<(CardChange, std::collections::HashMap<String, String>), WebError> {
+    let pairs: Vec<(String, String)> = serde_urlencoded::from_bytes(body).map_err(|_| WebError::bad(a.err_bad_form))?;
     let all = |k: &str| pairs.iter().filter(|(n, _)| n == k).map(|(_, v)| v.clone()).collect::<Vec<_>>();
     let one = |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap_or_default();
     let typed = |kinds: Vec<String>, values: Vec<String>| -> Vec<Typed> {
@@ -507,7 +510,7 @@ fn change_from(body: &[u8]) -> Result<(CardChange, std::collections::HashMap<Str
             if b.trim().is_empty() {
                 Ok(None)
             } else {
-                NaiveDate::parse_from_str(b.trim(), "%Y-%m-%d").map(Some).map_err(|_| WebError::bad("Bad date."))
+                NaiveDate::parse_from_str(b.trim(), "%Y-%m-%d").map(Some).map_err(|_| WebError::bad(a.err_bad_form))
             }
         })
         .transpose()?;
@@ -537,7 +540,7 @@ fn name_error(t: &'static i18n::T, e: DomainError) -> WebError {
 
 pub async fn create(State(st): State<AppState>, user: WebUser, RawForm(body): RawForm) -> Page {
     let t = i18n::t(user.lang);
-    let (change, fields) = change_from(&body)?;
+    let (change, fields) = change_from(&body, i18n::a(user.lang))?;
     let book: Uuid = fields.get("book").and_then(|b| b.parse().ok()).ok_or_else(|| WebError::bad(t.no_book))?;
     let saved = contacts::create(&st.pool, user.id(), book, &change, now()).await.map_err(|e| name_error(t, e))?;
     Ok(Redirect::to(&format!("{}?added={}", href(book, &saved.name), saved.change_id)).into_response())
@@ -550,7 +553,7 @@ pub async fn update(
     RawForm(body): RawForm,
 ) -> Page {
     let t = i18n::t(user.lang);
-    let (change, fields) = change_from(&body)?;
+    let (change, fields) = change_from(&body, i18n::a(user.lang))?;
     let etag = fields.get("etag").cloned().unwrap_or_default();
     match contacts::update(&st.pool, user.id(), c, &n, &etag, &change, now()).await {
         Ok(saved) => Ok(Redirect::to(&format!("{}?saved={}", href(c, &n), saved.change_id)).into_response()),

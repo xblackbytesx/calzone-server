@@ -13,7 +13,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use super::session::{AdminUser, WebUser};
-use super::{Nav, Page, WebError, html};
+use super::{Nav, Page, WebError, html, i18n};
 use crate::AppState;
 use crate::domain::imports::{self, Import, Status};
 use crate::domain::{CollectionKind, accounts, collections};
@@ -43,21 +43,24 @@ struct ImportPage {
     recent: Vec<ImportRow>,
 }
 
-fn status_words(s: Status) -> &'static str {
+fn status_words(a: &'static i18n::A, s: Status) -> &'static str {
     match s {
-        Status::Running => "running",
-        Status::Done => "done",
-        Status::Failed => "stopped with an error",
-        Status::Interrupted => "interrupted (run it again)",
+        Status::Running => a.status_running,
+        Status::Done => a.status_done,
+        Status::Failed => a.status_failed,
+        Status::Interrupted => a.status_interrupted,
     }
 }
 
-fn totals(i: &Import) -> String {
+fn totals(a: &'static i18n::A, i: &Import) -> String {
     let t = i.totals();
-    let mut parts =
-        vec![format!("{} new", t.created), format!("{} updated", t.updated), format!("{} unchanged", t.unchanged)];
+    let mut parts = vec![
+        format!("{} {}", t.created, a.n_new),
+        format!("{} {}", t.updated, a.n_updated),
+        format!("{} {}", t.unchanged, a.n_unchanged),
+    ];
     if t.failed > 0 {
-        parts.push(format!("{} not imported", t.failed));
+        parts.push(format!("{} {}", t.failed, a.n_not_imported));
     }
     parts.join(", ")
 }
@@ -97,17 +100,17 @@ pub async fn page(State(st): State<AppState>, user: WebUser) -> Page {
             when: i.created_at.format("%Y-%m-%d %H:%M UTC").to_string(),
             source: i.source.clone(),
             into: i.principal_name.clone(),
-            status: status_words(i.status),
-            totals: totals(i),
+            status: status_words(i18n::a(user.lang), i.status),
+            totals: totals(i18n::a(user.lang), i),
         })
         .collect();
     html(ImportPage { nav: Nav::new(&st, &user, "import"), targets, people, me: user.id(), recent })
 }
 
 /// One import at a time per person, so a double click cannot run two.
-async fn none_running(st: &AppState, actor: Uuid) -> Result<(), WebError> {
+async fn none_running(st: &AppState, actor: Uuid, a: &'static i18n::A) -> Result<(), WebError> {
     if imports::recent(&st.pool, actor, 5).await?.iter().any(|i| i.status == Status::Running) {
-        return Err(WebError::bad("An import is still running. Wait for it to finish."));
+        return Err(WebError::bad(a.err_import_running));
     }
     Ok(())
 }
@@ -115,7 +118,8 @@ async fn none_running(st: &AppState, actor: Uuid) -> Result<(), WebError> {
 /// The upload form: `target` (`byname` or a collection id) and one or more
 /// `file` parts.
 pub async fn upload(State(st): State<AppState>, user: WebUser, mut form: Multipart) -> Page {
-    let bad = |_| WebError::bad("The upload did not arrive in one piece. Try again.");
+    let a = i18n::a(user.lang);
+    let bad = |_| WebError::bad(a.err_upload);
     let mut target = Target::ByName;
     let mut uploads = Vec::new();
     while let Some(field) = form.next_field().await.map_err(bad)? {
@@ -123,7 +127,7 @@ pub async fn upload(State(st): State<AppState>, user: WebUser, mut form: Multipa
             Some("target") => {
                 let v = field.text().await.map_err(bad)?;
                 if v != "byname" {
-                    let id = v.parse::<Uuid>().map_err(|_| WebError::bad("Choose where it goes."))?;
+                    let id = v.parse::<Uuid>().map_err(|_| WebError::bad(a.err_choose_target))?;
                     target = Target::Existing(id);
                 }
             }
@@ -141,15 +145,15 @@ pub async fn upload(State(st): State<AppState>, user: WebUser, mut form: Multipa
         }
     }
     if uploads.is_empty() {
-        return Err(WebError::bad("Choose a file to import."));
+        return Err(WebError::bad(a.err_choose_file));
     }
     if let Target::Existing(id) = target {
         let c = collections::get(&st.pool, user.id(), id).await?;
         if !c.access.can_write() {
-            return Err(WebError::bad("You can't add to that one. Choose another."));
+            return Err(WebError::bad(a.err_cannot_add));
         }
     }
-    none_running(&st, user.id()).await?;
+    none_running(&st, user.id(), i18n::a(user.lang)).await?;
     let names: Vec<&str> = uploads.iter().map(|u| u.filename.as_str()).collect();
     let source = format!("file {}", names.join(", ")).chars().take(300).collect::<String>();
     let run = Run::begin(&st.pool, user.id(), user.id(), &source).await?;
@@ -171,14 +175,14 @@ pub struct BaikalForm {
 pub async fn baikal(State(st): State<AppState>, AdminUser(admin): AdminUser, Form(f): Form<BaikalForm>) -> Page {
     let url = baikal::check_url(&f.url).map_err(WebError::bad)?;
     if f.user.trim().is_empty() || f.password.is_empty() {
-        return Err(WebError::bad("Fill in the Baikal user name and password."));
+        return Err(WebError::bad(i18n::a(admin.lang).err_baikal_fields));
     }
     let into = accounts::get(&st.pool, f.into).await?;
     if into.is_group() || into.disabled {
-        return Err(WebError::bad("Choose a person whose account is enabled."));
+        return Err(WebError::bad(i18n::a(admin.lang).err_enabled_person));
     }
-    none_running(&st, into.id).await?;
-    none_running(&st, admin.id()).await?;
+    none_running(&st, into.id, i18n::a(admin.lang)).await?;
+    none_running(&st, admin.id(), i18n::a(admin.lang)).await?;
     let source = format!("Baikal {url} as {}", f.user.trim());
     let run = Run::begin(&st.pool, into.id, admin.id(), &source).await?;
     let id = run.id;
@@ -242,9 +246,9 @@ pub async fn report(State(st): State<AppState>, user: WebUser, Path(id): Path<Uu
     let finished = i.finished_at.map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string()).unwrap_or_default();
     html(ReportPage {
         nav: Nav::new(&st, &user, "import"),
-        status: status_words(i.status),
+        status: status_words(i18n::a(user.lang), i.status),
         running: i.status == Status::Running,
-        totals: totals(&i),
+        totals: totals(i18n::a(user.lang), &i),
         rows,
         failures,
         finished,

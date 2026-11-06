@@ -1,46 +1,77 @@
 {% extends "layout.html" %}
-{% block title %}Settings · CalZone{% endblock %}
+{% block title %}{{ nav.a.settings_title }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>Settings</h1><p class="meta">You sign in as <code>{{ name }}</code>.</p></div></header>
+<header class="page-header"><div><h1>{{ nav.a.settings_title }}</h1><p class="meta">{{ nav.a.signed_in_as }} <code>{{ name }}</code>.</p></div></header>
 {% if let Some(s) = saved %}<p class="notice ok" role="status">{{ s }}</p>{% endif %}
 <div class="panels">
   <section class="panel">
-    <h2>Your name</h2>
+    <h2>{{ nav.a.preferences }}</h2>
+    <form method="post" action="/settings/preferences" class="form">
+      <label class="field">{{ nav.a.language }}
+        <select name="language">
+          <option value="browser"{% if language == "browser" %} selected{% endif %}>{{ nav.a.lang_browser }}</option>
+          <option value="en"{% if language == "en" %} selected{% endif %}>English</option>
+          <option value="nl"{% if language == "nl" %} selected{% endif %}>Nederlands</option>
+        </select></label>
+      <label class="field">{{ nav.a.theme }}
+        <select name="theme">
+          <option value="dark"{% if theme == "dark" %} selected{% endif %}>{{ nav.a.theme_dark }}</option>
+          <option value="light"{% if theme == "light" %} selected{% endif %}>{{ nav.a.theme_light }}</option>
+          <option value="system"{% if theme == "system" %} selected{% endif %}>{{ nav.a.theme_system }}</option>
+        </select></label>
+      <label class="field">{{ nav.a.timezone }}
+        <select name="timezone">{% for z in zones %}<option value="{{ z }}"{% if *z == timezone %} selected{% endif %}>{{ z }}</option>{% endfor %}</select></label>
+      <label class="field">{{ nav.a.week_starts }}
+        <select name="week_start">
+          <option value="1"{% if week_start == 1 %} selected{% endif %}>{{ nav.a.monday }}</option>
+          <option value="7"{% if week_start == 7 %} selected{% endif %}>{{ nav.a.sunday }}</option>
+          <option value="6"{% if week_start == 6 %} selected{% endif %}>{{ nav.a.saturday }}</option>
+        </select></label>
+      <label class="field">{{ nav.a.clock }}
+        <select name="clock">
+          <option value="24"{% if clock_24h %} selected{% endif %}>{{ nav.a.clock_24 }}</option>
+          <option value="12"{% if !clock_24h %} selected{% endif %}>{{ nav.a.clock_12 }}</option>
+        </select></label>
+      <button type="submit" class="primary">{{ nav.t.save }}</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>{{ nav.a.your_name }}</h2>
     <form method="post" action="/settings/profile" class="form">
-      <label class="field">Shown to others as <input type="text" name="display_name" value="{{ display_name }}" maxlength="100" placeholder="{{ name }}"></label>
-      <button type="submit" class="primary">Save</button>
+      <label class="field">{{ nav.a.shown_as }} <input type="text" name="display_name" value="{{ display_name }}" maxlength="100" placeholder="{{ name }}"></label>
+      <button type="submit" class="primary">{{ nav.t.save }}</button>
     </form>
   </section>
   <section class="panel">
-    <h2>Passphrase</h2>
+    <h2>{{ nav.a.passphrase_h }}</h2>
     <form method="post" action="/settings/passphrase" class="form">
-      <label class="field">Current passphrase <input type="password" name="current" autocomplete="current-password" required></label>
-      <label class="field">New passphrase <span class="hint">At least {{ min }} characters. A few words you will remember works well.</span>
+      <label class="field">{{ nav.a.current_passphrase }} <input type="password" name="current" autocomplete="current-password" required></label>
+      <label class="field">{{ nav.a.new_passphrase }} <span class="hint">{{ nav.a.min_chars_pre }} {{ min }} {{ nav.a.min_chars_post }}</span>
         <input type="password" name="new" autocomplete="new-password" minlength="{{ min }}" required></label>
-      <label class="field">New passphrase again <input type="password" name="repeat" autocomplete="new-password" minlength="{{ min }}" required></label>
-      <button type="submit" class="primary">Change passphrase</button>
+      <label class="field">{{ nav.a.new_passphrase_again }} <input type="password" name="repeat" autocomplete="new-password" minlength="{{ min }}" required></label>
+      <button type="submit" class="primary">{{ nav.a.change_passphrase }}</button>
     </form>
-    <p class="hint">Changing it signs you out everywhere else. Device passwords keep working.</p>
+    <p class="hint">{{ nav.a.passphrase_hint }}</p>
   </section>
   <section class="panel">
-    <h2>Two-factor sign-in</h2>
+    <h2>{{ nav.a.two_factor_h }}</h2>
     {% if has_totp %}
-    <p><span class="badge ok">on</span> Signing in asks for a code from your authenticator app. {{ codes_left }} recovery code{% if codes_left != 1 %}s{% endif %} left.</p>
+    <p><span class="badge ok">{{ nav.a.tf_on }}</span> {{ nav.a.tf_on_text }} {{ nav.a.codes_left }} {{ codes_left }}</p>
     <form method="post" action="/settings/two-factor/recovery" class="form">
-      <div class="field-row"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required placeholder="Code from the app" aria-label="Code from the app"><button type="submit">New recovery codes</button></div>
+      <div class="field-row"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required placeholder="{{ nav.a.code_from_app }}" aria-label="{{ nav.a.code_from_app }}"><button type="submit">{{ nav.a.new_recovery_codes }}</button></div>
     </form>
     {% if !totp_required %}
-    <details class="disclosure"><summary>Turn it off</summary>
+    <details class="disclosure"><summary>{{ nav.a.turn_off }}</summary>
       <form method="post" action="/settings/two-factor/off" class="form">
-        <label class="field">Passphrase <input type="password" name="passphrase" autocomplete="current-password" required></label>
-        <label class="field">Code from the app or a recovery code <input type="text" name="code" autocomplete="one-time-code" maxlength="20" required></label>
-        <button type="submit" class="danger">Turn off two-factor sign-in</button>
+        <label class="field">{{ nav.a.passphrase_h }} <input type="password" name="passphrase" autocomplete="current-password" required></label>
+        <label class="field">{{ nav.a.code_or_recovery }} <input type="text" name="code" autocomplete="one-time-code" maxlength="20" required></label>
+        <button type="submit" class="danger">{{ nav.a.turn_off_button }}</button>
       </form>
     </details>
-    {% else %}<p class="hint">Required for your account on this server.</p>{% endif %}
+    {% else %}<p class="hint">{{ nav.a.tf_required }}</p>{% endif %}
     {% else %}
-    <p>After your passphrase, also ask for a code from an app on your phone, so a leaked passphrase alone is not enough.{% if totp_required %} Required for your account.{% endif %}</p>
-    <a class="button primary" href="/settings/two-factor">Set up</a>
+    <p>{{ nav.a.tf_pitch }}{% if totp_required %} {{ nav.a.tf_required }}{% endif %}</p>
+    <a class="button primary" href="/settings/two-factor">{{ nav.a.set_up }}</a>
     {% endif %}
   </section>
 </div>

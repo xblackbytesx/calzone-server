@@ -221,7 +221,7 @@ async fn collections_create_edit_share_delete() {
         StatusCode::SEE_OTHER
     );
     let list = bob.get("/collections").await.body;
-    assert!(list.contains("Family &#60;3") && list.contains("Shared by anna, can edit"));
+    assert!(list.contains("Family &#60;3") && list.contains("Shared by anna · can edit"));
     let rename = bob.post(&fam, &[("name", "Mine")]).await;
     assert_eq!(rename.status, StatusCode::FORBIDDEN);
     assert!(!bob.get(&fam).await.body.contains("Type <strong>"), "no delete panel for bob");
@@ -353,7 +353,7 @@ async fn people_and_groups() {
     anna.post(&format!("{cal}/share"), &[("principal", &g), ("level", "read")]).await;
     let mut dana = Browser::new(&app);
     dana.login("dana", &temp2).await;
-    assert!(dana.get("/collections").await.body.contains("Shared by anna, can view"));
+    assert!(dana.get("/collections").await.body.contains("Shared by anna · can view"));
     let anna_s = anna_id.to_string();
     assert_eq!(
         anna.post(&format!("/admin/groups/{anna_s}/members"), &[("member", &dana_s)]).await.status,
@@ -587,7 +587,7 @@ async fn two_factor_sign_in() {
     assert_eq!(codes.len(), 10);
     assert_eq!(anna.get("/collections").await.status, StatusCode::OK);
     assert_eq!(location(&other.get("/collections").await), "/login", "turning it on signs other browsers out");
-    assert!(anna.get("/settings").await.body.contains("10 recovery codes left"));
+    assert!(anna.get("/settings").await.body.contains("Recovery codes left: 10"));
 
     // Logging in now takes a code; the pending session reaches nothing else.
     anna.post("/logout", &[]).await;
@@ -607,7 +607,7 @@ async fn two_factor_sign_in() {
     anna.login("anna", "anna passphrase").await;
     let messy = codes[0].to_uppercase().replace('-', " ");
     assert_eq!(location(&anna.post("/login/code", &[("code", &messy)]).await), "/settings?recovery=used");
-    assert!(anna.get("/settings?recovery=used").await.body.contains("9 recovery codes left"));
+    assert!(anna.get("/settings?recovery=used").await.body.contains("Recovery codes left: 9"));
     anna.post("/logout", &[]).await;
     anna.login("anna", "anna passphrase").await;
     assert_eq!(anna.post("/login/code", &[("code", &codes[0])]).await.status, StatusCode::UNAUTHORIZED);
@@ -723,5 +723,209 @@ async fn keep_me_signed_in() {
     let r = b.post("/login/code", &[("code", &recovery)]).await;
     assert_eq!(location(&r), "/settings?recovery=used");
     assert!(!r.header("set-cookie").unwrap().contains("Max-Age"));
+    db.drop().await;
+}
+
+/// The visible words of a page: tags, attributes and scripts dropped.
+fn visible_words(html: &str) -> Vec<String> {
+    let starts = |i: usize, pat: &str| html.get(i..i + pat.len()).is_some_and(|x| x.eq_ignore_ascii_case(pat));
+    let mut out = String::new();
+    let (mut in_tag, mut skip) = (false, false);
+    for (i, c) in html.char_indices() {
+        if starts(i, "<script") || starts(i, "<style") {
+            skip = true;
+        }
+        if skip && (starts(i, "</script>") || starts(i, "</style>")) {
+            skip = false;
+        }
+        match c {
+            '<' => in_tag = true,
+            '>' => {
+                in_tag = false;
+                out.push(' ');
+            }
+            _ if !in_tag && !skip => out.push(c),
+            _ => {}
+        }
+    }
+    out.split(|c: char| !c.is_alphabetic() && c != '\'').filter(|w| !w.is_empty()).map(str::to_string).collect()
+}
+
+#[tokio::test]
+async fn every_page_in_dutch_and_preferences() {
+    let Some(db) = Db::new().await else { return };
+    setup(&db).await;
+    let app = db.app();
+    let mut anna = Browser::new(&app);
+    anna.login("anna", "anna passphrase").await;
+    anna.post("/collections", &[("kind", "calendar"), ("name", "Gezin")]).await;
+    anna.post("/collections", &[("kind", "addressbook"), ("name", "Adressen")]).await;
+    // Preferences: Dutch, light, Sunday, 12-hour, a zone.
+    let r = anna
+        .post(
+            "/settings/preferences",
+            &[
+                ("language", "nl"),
+                ("theme", "light"),
+                ("timezone", "Europe/Amsterdam"),
+                ("week_start", "7"),
+                ("clock", "12"),
+            ],
+        )
+        .await;
+    assert_eq!(location(&r), "/settings?saved=preferences");
+    let s = anna.get("/settings?saved=preferences").await.body;
+    assert!(s.contains(r#"<html lang="nl" data-theme="light">"#) && s.contains("Voorkeuren opgeslagen."));
+    assert!(s.contains(r#"<option value="7" selected>"#) && s.contains(r#"<option value="12" selected>"#));
+    assert!(s.contains(r#"<option value="Europe/Amsterdam" selected>"#));
+    assert_eq!(
+        anna.post(
+            "/settings/preferences",
+            &[
+                ("language", "nl"),
+                ("theme", "pink"),
+                ("timezone", "Europe/Amsterdam"),
+                ("week_start", "1"),
+                ("clock", "24")
+            ]
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+
+    // Every page in Dutch, with no common English words left in sight.
+    let english = [
+        "Save",
+        "Delete",
+        "Settings",
+        "Calendars",
+        "Address",
+        "books",
+        "Remove",
+        "Shared",
+        "Download",
+        "Import",
+        "Export",
+        "Devices",
+        "People",
+        "Groups",
+        "Add",
+        "Your",
+        "Passphrase",
+        "Copy",
+        "Done",
+        "Contacts",
+        "Name",
+        "the",
+        "and",
+        "you",
+    ];
+    let pages = [
+        "/settings",
+        "/collections",
+        "/devices",
+        "/admin/people",
+        "/import",
+        "/calendar",
+        "/contacts",
+        "/contacts/new",
+    ];
+    for path in pages {
+        let r = anna.get(path).await;
+        assert_eq!(r.status, StatusCode::OK, "{path}");
+        assert!(r.body.contains(r#"lang="nl""#), "{path}");
+        let words = visible_words(&r.body);
+        let left: Vec<&str> = english.iter().copied().filter(|e| words.iter().any(|w| w == e)).collect();
+        assert!(left.is_empty(), "{path} still shows English: {left:?}");
+    }
+    let id = calzone_server::domain::collections::visible(
+        &db.pool,
+        principals::by_name(&db.pool, "anna").await.unwrap().id,
+        calzone_server::domain::CollectionKind::Calendar,
+    )
+    .await
+    .unwrap()[0]
+        .id;
+    for path in [format!("/collections/{id}"), format!("/calendar/settings/{id}")] {
+        let r = anna.get(&path).await;
+        let words = visible_words(&r.body);
+        let left: Vec<&str> = english.iter().copied().filter(|e| words.iter().any(|w| w == e)).collect();
+        assert!(left.is_empty(), "{path} still shows English: {left:?}");
+    }
+    // Generic errors too, in the reader's language.
+    let gone = format!("/collections/{}", uuid::Uuid::new_v4());
+    let r = send(
+        &app,
+        "GET",
+        &gone,
+        None,
+        &[("cookie", &format!("calzone_session={}", anna.cookie.clone().unwrap())), ("hx-request", "true")],
+        "",
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert!(r.body.contains("Niet gevonden.") && r.header("x-cz-generic").is_none());
+    let page = anna.get(&gone).await.body;
+    assert!(page.contains("Niet gevonden.") && page.contains("Gebruik de terugknop"));
+    // Bob is not an admin: no People page, in his (browser) language.
+    let mut bob = Browser::new(&app);
+    bob.login("bob", "bob passphrase").await;
+    let r = bob.get("/admin/people").await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+    assert!(r.body.contains("Only an admin can do that."));
+    // The phone menu holds the rest of the sections.
+    let s = anna.get("/calendar").await.body;
+    assert!(s.contains("<summary>Meer</summary>") && s.contains("class=\"sections-menu\""));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_calendar_list_and_its_settings_sheet() {
+    let Some(db) = Db::new().await else { return };
+    let (anna_id, bob_id) = setup(&db).await;
+    let app = db.app();
+    let mut anna = Browser::new(&app);
+    anna.login("anna", "anna passphrase").await;
+    anna.post("/collections", &[("kind", "calendar"), ("name", "Family")]).await;
+    let fam = calzone_server::domain::collections::by_path(&db.pool, anna_id, "anna", "family").await.unwrap().id;
+    calzone_server::domain::collections::set_grant(
+        &db.pool,
+        anna_id,
+        fam,
+        bob_id,
+        Some(calzone_server::domain::Access::Read),
+    )
+    .await
+    .unwrap();
+    let page = anna.get("/calendar").await.body;
+    assert!(page.contains(&format!("data-cal-id=\"{fam}\"")) && page.contains("data-cal-show checked"));
+    let sheet = anna.get(&format!("/calendar/settings/{fam}")).await.body;
+    assert!(
+        sheet.contains("My name for it") && sheet.contains("Shared with") && sheet.contains("Bob")
+            || sheet.contains("bob")
+    );
+    assert!(sheet.contains(&format!("/collections/{fam}/unshare/{bob_id}")));
+    // Bob: his own settings, no sharing; hidden shows unchecked.
+    let mut bob = Browser::new(&app);
+    bob.login("bob", "bob passphrase").await;
+    calzone_server::domain::prefs::set_calendar_prefs(
+        &db.pool,
+        bob_id,
+        fam,
+        &calzone_server::domain::prefs::CalendarPrefs {
+            hidden: true,
+            display_name: Some("Anna's".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let page = bob.get("/calendar").await.body;
+    assert!(
+        page.contains("Anna&#39;s") && !page.contains("data-cal-show checked") && page.contains("title=\"From Anna\"")
+    );
+    let sheet = bob.get(&format!("/calendar/settings/{fam}")).await.body;
+    assert!(sheet.contains("My name for it") && !sheet.contains("Shared with") && sheet.contains("can view"));
     db.drop().await;
 }

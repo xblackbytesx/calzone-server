@@ -127,7 +127,7 @@ pub async fn occurrences(
                     calendar: calendar.clone(),
                     owner: owner.clone(),
                     own: c.owner_id == actor,
-                    editable: c.access.can_write(),
+                    editable: c.access.can_write() && !c.subscribed,
                 });
             }
         }
@@ -517,6 +517,38 @@ async fn carry_reminders(
     Ok(())
 }
 
+/// Set the actor's own reminders on an event (every occurrence) and
+/// nothing else. Allowed with view access too: the shared object must come
+/// out byte for byte the same, so only the actor's layer changes (decision
+/// 8). Recorded in the history like any write, so it can be undone.
+pub async fn update_reminders(
+    pool: &PgPool,
+    actor: Actor,
+    collection: Uuid,
+    name: &str,
+    etag: &str,
+    minutes: &[i64],
+) -> Result<Saved> {
+    let mut tx = pool.begin().await?;
+    let mut locked = lock(&mut tx, actor, collection).await?;
+    let (text, rev) = served_in(&mut tx, actor, collection, name).await?;
+    if objects::etag(rev) != etag {
+        return Err(DomainError::PreconditionFailed);
+    }
+    let updated = edit::set_alarms(&text, minutes).map_err(edit_error)?;
+    let prior = before(&mut tx, collection, name).await?;
+    let p = prepare(locked.kind, &locked.components, &updated)?;
+    if prior.body.as_deref() != Some(p.shared.as_str()) {
+        // Only the layer may change through here; anything else is an edit.
+        return Err(DomainError::ReadOnly);
+    }
+    let w = store(&mut tx, &mut locked, actor, collection, name, p, Precondition::IfMatch(etag.to_string())).await?;
+    let change_id = Uuid::new_v4();
+    record(&mut tx, change_id, actor, collection, name, prior, Some(w.meta.revision)).await?;
+    tx.commit().await?;
+    Ok(Saved { change_id, name: name.to_string(), etag: Some(w.meta.etag()), created: None })
+}
+
 /// The UID of a new object the editor made (always a fresh UUID).
 fn p_uid(text: &str) -> String {
     Document::parse(text)
@@ -558,21 +590,23 @@ pub async fn undo(pool: &PgPool, actor: Actor, change_id: Uuid) -> Result<()> {
     for (_, c, ..) in &rows {
         if !locks.contains_key(c) {
             let l = lock(&mut tx, actor, *c).await?;
-            if !l.access.can_write() {
-                return Err(DomainError::ReadOnly);
-            }
             locks.insert(*c, l);
         }
     }
-    for (_, c, name, _, _, after) in &rows {
-        let now: Option<i64> =
-            sqlx::query_scalar("SELECT revision FROM objects WHERE collection_id = $1 AND name = $2")
+    for (_, c, name, before_body, _, after) in &rows {
+        let now: Option<(i64, String)> =
+            sqlx::query_as("SELECT revision, body FROM objects WHERE collection_id = $1 AND name = $2")
                 .bind(c)
                 .bind(name)
                 .fetch_optional(&mut *tx)
                 .await?;
-        if now != *after {
+        if now.as_ref().map(|n| n.0) != *after {
             return Err(DomainError::PreconditionFailed);
+        }
+        // Without write access only a layer-only change can be undone (a
+        // reader's own reminders): the shared object must stay the same.
+        if !locks[c].access.can_write() && now.map(|n| n.1) != *before_body {
+            return Err(DomainError::ReadOnly);
         }
     }
     for (_, c, name, body, Json(layers), after) in rows.iter().rev() {
@@ -771,7 +805,7 @@ pub async fn detail(
             .map(|a| a.label().to_string())
             .unwrap_or_else(|_| c.owner_name.clone()),
         own: c.owner_id == actor,
-        editable: c.access.can_write(),
+        editable: c.access.can_write() && !c.subscribed,
         color: prefs.color.or(c.color).unwrap_or_else(|| DEFAULT_COLOR.into()),
     })
 }

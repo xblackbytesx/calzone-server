@@ -11,7 +11,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use super::session::WebUser;
-use super::{Nav, Page, WebError, base_url, color_input, html};
+use super::{Nav, Page, WebError, base_url, color_input, html, i18n};
 use crate::AppState;
 use crate::domain::accounts::{self, Account};
 use crate::domain::collections::{self, Grant, slugify};
@@ -26,12 +26,11 @@ pub struct Row {
     pub shared: String,
 }
 
-fn level_words(a: Access) -> &'static str {
+fn level_words(t: &'static i18n::T, a: Access) -> &'static str {
     match a {
-        Access::Read => "can view",
-        Access::Write => "can edit",
-        Access::Admin => "can edit and share",
-        Access::Owner => "owner",
+        Access::Read => t.can_view,
+        Access::Write => t.can_edit,
+        Access::Admin | Access::Owner => t.can_share,
     }
 }
 
@@ -39,11 +38,11 @@ fn display(c: &Collection) -> String {
     if c.display_name.is_empty() { c.slug.clone() } else { c.display_name.clone() }
 }
 
-fn row(c: &Collection) -> Row {
+fn row(c: &Collection, t: &'static i18n::T, a: &'static i18n::A) -> Row {
     let shared = if c.access == Access::Owner {
         String::new()
     } else {
-        format!("Shared by {}, {}", c.owner_name, level_words(c.access))
+        format!("{} {} · {}", a.shared_by, c.owner_name, level_words(t, c.access))
     };
     Row { id: c.id, name: display(c), color: color_input(c.color.as_deref()), shared }
 }
@@ -61,8 +60,8 @@ pub async fn list(State(st): State<AppState>, user: WebUser) -> Page {
     let books = collections::visible(&st.pool, user.id(), CollectionKind::AddressBook).await?;
     html(ListPage {
         nav: Nav::new(&st, &user, "collections"),
-        calendars: cals.iter().map(row).collect(),
-        books: books.iter().map(row).collect(),
+        calendars: cals.iter().map(|c| row(c, i18n::t(user.lang), i18n::a(user.lang))).collect(),
+        books: books.iter().map(|c| row(c, i18n::t(user.lang), i18n::a(user.lang))).collect(),
     })
 }
 
@@ -82,12 +81,12 @@ fn valid_color(c: &str) -> Option<String> {
 pub async fn create(State(st): State<AppState>, user: WebUser, Form(f): Form<CreateForm>) -> Page {
     let name = f.name.trim();
     if name.is_empty() || name.chars().count() > 100 {
-        return Err(WebError::bad("Give it a name of 1 to 100 characters."));
+        return Err(WebError::bad(i18n::a(user.lang).err_name_len));
     }
     let (kind, fallback) = match f.kind.as_str() {
         "calendar" => (CollectionKind::Calendar, "calendar"),
         "addressbook" => (CollectionKind::AddressBook, "contacts"),
-        _ => return Err(WebError::bad("Choose a calendar or an address book.")),
+        _ => return Err(WebError::bad(i18n::a(user.lang).err_kind)),
     };
     let color = if kind == CollectionKind::Calendar { valid_color(&f.color) } else { None };
     let new =
@@ -140,7 +139,7 @@ pub async fn show(State(st): State<AppState>, user: WebUser, headers: HeaderMap,
             .map(|g| GrantRow {
                 id: g.principal_id,
                 label: everyone.iter().find(|a| a.id == g.principal_id).map(label).unwrap_or_else(|| g.name.clone()),
-                level: level_words(g.level),
+                level: level_words(i18n::t(user.lang), g.level),
             })
             .collect();
         let candidates = everyone
@@ -162,7 +161,7 @@ pub async fn show(State(st): State<AppState>, user: WebUser, headers: HeaderMap,
         name: display(&c),
         calendar,
         color: color_input(c.color.as_deref()),
-        level: level_words(c.access),
+        level: level_words(i18n::t(user.lang), c.access),
         can_admin,
         owner: c.access == Access::Owner,
         dav_url,
@@ -189,10 +188,10 @@ pub async fn update(
 ) -> Page {
     let name = f.name.trim();
     if name.is_empty() || name.chars().count() > 100 {
-        return Err(WebError::bad("Give it a name of 1 to 100 characters."));
+        return Err(WebError::bad(i18n::a(user.lang).err_name_len));
     }
     if f.description.chars().count() > 1000 {
-        return Err(WebError::bad("Keep the description under 1000 characters."));
+        return Err(WebError::bad(i18n::a(user.lang).err_desc_len));
     }
     let color = valid_color(&f.color);
     let c = collections::get(&st.pool, user.id(), id).await?;
@@ -209,7 +208,7 @@ pub struct ShareForm {
 }
 
 pub async fn share(State(st): State<AppState>, user: WebUser, Path(id): Path<Uuid>, Form(f): Form<ShareForm>) -> Page {
-    let level = Access::from_level(&f.level).ok_or_else(|| WebError::bad("Choose what they may do."))?;
+    let level = Access::from_level(&f.level).ok_or_else(|| WebError::bad(i18n::a(user.lang).err_level))?;
     // Only people and groups that exist; anything else is not found.
     accounts::get(&st.pool, f.principal).await?;
     collections::set_grant(&st.pool, user.id(), id, f.principal, Some(level)).await?;
@@ -237,7 +236,7 @@ pub async fn delete(
 ) -> Page {
     let c = collections::get(&st.pool, user.id(), id).await?;
     if !f.confirm.trim().eq_ignore_ascii_case(display(&c).trim()) {
-        return Err(WebError::bad(format!("Type {} exactly to delete it.", display(&c))));
+        return Err(WebError::bad(i18n::a(user.lang).err_type_exactly));
     }
     collections::delete(&st.pool, user.id(), id).await?;
     Ok(Redirect::to("/collections").into_response())

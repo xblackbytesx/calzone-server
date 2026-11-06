@@ -32,6 +32,7 @@ async fn main() -> Result<()> {
                 secret_key: Some(secret_key),
                 two_factor: cfg.two_factor,
                 default_timezone: cfg.default_timezone,
+                feeds_allow_private: cfg.feeds_allow_private,
                 dav: cfg.dav,
                 cookie_secure: cfg.cookie_secure,
                 public_url: cfg.public_url.clone(),
@@ -43,6 +44,7 @@ async fn main() -> Result<()> {
                 tracing::warn!(count = stale, "imports interrupted by the last shutdown; running them again converges");
             }
             tracing::info!(dav = state.dav, "CalDAV/CardDAV door {}", if state.dav { "on" } else { "off" });
+            calzone_server::feeds::spawn_refresher(state.pool.clone(), state.feeds_allow_private);
             let app = router(state);
             let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
             tracing::info!(bind = %cfg.bind, "listening");

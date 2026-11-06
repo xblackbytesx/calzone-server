@@ -180,7 +180,10 @@ fn collection_value(c: &Collection, ns: &str, local: &str) -> Option<Value> {
             Some(Value::Text(if c.display_name.is_empty() { c.slug.clone() } else { c.display_name.clone() }))
         }
         (DAV, "owner") => Some(Value::Hrefs(vec![path::principal_href(&c.owner_name)])),
-        (DAV, "current-user-privilege-set") => Some(Value::Xml(privileges(c.access))),
+        // A subscribed calendar is read-only for every client (decision 24).
+        (DAV, "current-user-privilege-set") => {
+            Some(Value::Xml(privileges(if c.subscribed { Access::Read } else { c.access })))
+        }
         (DAV, "sync-token") => Some(Value::Text(token())),
         (CS, "getctag") => Some(Value::Text(token())),
         (DAV, "supported-report-set") => Some(Value::Xml(if calendar {

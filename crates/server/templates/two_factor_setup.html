@@ -1,23 +1,23 @@
 {% extends "layout.html" %}
-{% block title %}Two-factor sign-in · CalZone{% endblock %}
+{% block title %}{{ nav.a.two_factor_h }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>Two-factor sign-in</h1><p class="meta">After your passphrase, CalZone will also ask for a code from an app on your phone. Someone who learns your passphrase still cannot get in.</p></div></header>
-{% if required %}<p class="notice warn" role="status">Your account needs two-factor sign-in on this server. Set it up to continue.</p>{% endif %}
+<header class="page-header"><div><h1>{{ nav.a.two_factor_h }}</h1><p class="meta">{{ nav.a.tf_setup_meta }}</p></div></header>
+{% if required %}<p class="notice warn" role="status">{{ nav.a.tf_required_notice }}</p>{% endif %}
 <div class="panels">
   <section class="panel">
-    <h2>1. Scan this with your authenticator app</h2>
-    <p>Any authenticator app works: Aegis, 2FAS, Google Authenticator, Bitwarden, Proton Pass.</p>
+    <h2>{{ nav.a.tf_step1 }}</h2>
+    <p>{{ nav.a.tf_any_app }}</p>
     <div class="qr">{{ qr|safe }}</div>
-    <p class="hint">Can't scan? Enter this key in the app instead (time based):</p>
-    <div class="copy-line"><code id="totp-secret">{{ secret }}</code><button type="button" class="compact" data-copy="#totp-secret">Copy</button></div>
+    <p class="hint">{{ nav.a.tf_cant_scan }}</p>
+    <div class="copy-line"><code id="totp-secret">{{ secret }}</code><button type="button" class="compact" data-copy="#totp-secret">{{ nav.a.copy }}</button></div>
   </section>
   <section class="panel">
-    <h2>2. Enter the code it shows</h2>
+    <h2>{{ nav.a.tf_step2 }}</h2>
     <form method="post" action="/settings/two-factor" class="form">
-      <label class="field">Code <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required></label>
-      <button type="submit" class="primary">Turn on</button>
+      <label class="field">{{ nav.a.code }} <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required></label>
+      <button type="submit" class="primary">{{ nav.a.turn_on }}</button>
     </form>
-    <p class="hint">Turning it on signs you out in every other browser.</p>
+    <p class="hint">{{ nav.a.tf_turn_on_hint }}</p>
   </section>
 </div>
 {% endblock %}

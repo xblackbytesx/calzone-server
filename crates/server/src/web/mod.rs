@@ -12,6 +12,7 @@ mod api;
 mod calendar;
 mod collections;
 mod contacts;
+mod feeds;
 pub mod i18n;
 mod pages;
 mod passwords;
@@ -22,7 +23,7 @@ mod two_factor;
 use std::sync::LazyLock;
 
 use axum::Router;
-use axum::extract::{DefaultBodyLimit, Request};
+use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG, HOST, IF_NONE_MATCH, ORIGIN};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
@@ -36,7 +37,8 @@ use session::WebUser;
 
 /// The web routes. With the DAV door on, `/` also answers PROPFIND (its
 /// fallback), for clients that start at the bare server address.
-pub fn routes(dav: bool) -> Router<AppState> {
+pub fn routes(state: &AppState) -> Router<AppState> {
+    let dav = state.dav;
     let mut root = get(pages::home);
     if dav {
         root = root.fallback(crate::dav::handle);
@@ -48,6 +50,7 @@ pub fn routes(dav: bool) -> Router<AppState> {
         .route("/settings", get(pages::settings))
         .route("/settings/profile", post(pages::save_profile))
         .route("/settings/passphrase", post(pages::change_passphrase))
+        .route("/settings/preferences", post(pages::save_preferences))
         .route("/login/code", get(two_factor::code_page).post(two_factor::code))
         .route("/settings/two-factor", get(two_factor::setup).post(two_factor::confirm))
         .route("/settings/two-factor/recovery", post(two_factor::new_codes))
@@ -78,6 +81,7 @@ pub fn routes(dav: bool) -> Router<AppState> {
         .route("/calendar", get(calendar::page))
         .route("/calendar/event", get(calendar::event))
         .route("/calendar/event/new", get(calendar::new_event))
+        .route("/calendar/settings/{id}", get(calendar::settings_sheet))
         .route("/static/event-calendar.min.js", get(|h: HeaderMap| asset(h, &EC_JS, "text/javascript")))
         .route("/static/event-calendar.min.css", get(|h: HeaderMap| asset(h, &EC_CSS, "text/css")))
         .route("/static/calendar.js", get(|h: HeaderMap| asset(h, &CAL_JS, "text/javascript")))
@@ -90,6 +94,14 @@ pub fn routes(dav: bool) -> Router<AppState> {
         .route("/api/settings", get(api::settings).post(api::save_settings))
         .route("/api/calendars", get(api::calendars))
         .route("/api/calendars/{id}/prefs", post(api::save_prefs))
+        .route("/api/calendars/{id}/links", post(feeds::create_link))
+        .route("/api/links/{id}/revoke", post(feeds::revoke_link))
+        .route("/api/subscriptions", post(feeds::subscribe))
+        .route("/api/subscriptions/{id}/refresh", post(feeds::refresh))
+        .route("/api/subscriptions/{id}/interval", post(feeds::set_interval))
+        .route("/api/subscriptions/{id}/delete", post(feeds::unsubscribe))
+        .route("/calendar/subscribe", get(feeds::subscribe_sheet))
+        .route("/feeds/{file}", get(feeds::feed))
         .route("/import", get(transfer::page))
         .route("/import/file", post(transfer::upload).layer(DefaultBodyLimit::max(transfer::UPLOAD_LIMIT)))
         .route("/import/baikal", post(transfer::baikal))
@@ -101,7 +113,7 @@ pub fn routes(dav: bool) -> Router<AppState> {
         .route("/static/app.js", get(|h: HeaderMap| asset(h, &JS, "text/javascript")))
         .route("/static/htmx.min.js", get(|h: HeaderMap| asset(h, &HTMX, "text/javascript")))
         .layer(DefaultBodyLimit::max(64 * 1024))
-        .layer(middleware::from_fn(guard))
+        .layer(middleware::from_fn_with_state(state.clone(), guard))
 }
 
 /// An embedded static file with its ETag, computed once.
@@ -144,7 +156,11 @@ pub const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; 
 /// sets the page security headers. `SameSite=Strict` cookies already stop
 /// most CSRF; this is the second lock. Every method but GET and HEAD counts
 /// as a write. DAV clients (PROPFIND on `/`) send no `Origin`.
-async fn guard(req: Request, next: Next) -> Response {
+///
+/// It also finishes error fragments: a generic error (one a domain error
+/// made, marked `x-cz-generic`) is put in the reader's language, and a
+/// fragment that reached a plain browser request becomes a small page.
+async fn guard(State(st): State<AppState>, req: Request, next: Next) -> Response {
     if !matches!(*req.method(), Method::GET | Method::HEAD)
         && let Some(origin) = req.headers().get(ORIGIN).and_then(|v| v.to_str().ok())
     {
@@ -155,9 +171,25 @@ async fn guard(req: Request, next: Next) -> Response {
         }
     }
     let htmx = is_htmx(req.headers());
+    let headers = req.headers().clone();
     let mut resp = next.run(req).await;
-    if !htmx && resp.headers().contains_key("hx-retarget") {
-        resp = error_page(resp).await;
+    let generic = resp.headers_mut().remove("x-cz-generic");
+    let fragment = resp.headers().contains_key("hx-retarget");
+    if generic.is_some() || (fragment && !htmx) {
+        let lang = request_lang(&st, &headers).await;
+        if let Some(key) = generic.as_ref().and_then(|v| v.to_str().ok())
+            && let Some(msg) = i18n::a(lang).generic(key)
+        {
+            let status = resp.status();
+            let (mut parts, _) = resp.into_parts();
+            parts.headers.remove(axum::http::header::CONTENT_LENGTH);
+            let body = format!("<p class=\"notice error\" role=\"alert\">{}</p>", escape(msg));
+            resp = Response::from_parts(parts, axum::body::Body::from(body));
+            *resp.status_mut() = status;
+        }
+        if fragment && !htmx {
+            resp = error_page(resp, lang).await;
+        }
     }
     let h = resp.headers_mut();
     h.insert("content-security-policy", HeaderValue::from_static(CSP));
@@ -168,17 +200,43 @@ async fn guard(req: Request, next: Next) -> Response {
     resp
 }
 
+/// The reader's language for a message the handler could not translate:
+/// their setting when signed in (or half way), else the browser's.
+async fn request_lang(st: &AppState, headers: &HeaderMap) -> calzone_core::quickadd::Lang {
+    let token = headers
+        .get_all(axum::http::header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .filter_map(|kv| kv.trim().split_once('='))
+        .find(|(k, _)| *k == session::COOKIE_NAME)
+        .map(|(_, v)| v.to_string());
+    let mut setting = None;
+    if let Some(t) = token {
+        let account = match crate::domain::accounts::session_user(&st.pool, &t).await {
+            Ok(Some(a)) => Some(a),
+            _ => crate::domain::accounts::pending_user(&st.pool, &t).await.ok().flatten(),
+        };
+        setting = account.and_then(|a| a.language);
+    }
+    i18n::lang(setting.as_deref(), headers)
+}
+
 /// An error fragment reached a plain browser request (no JavaScript): wrap
 /// it in a minimal page with a way back.
-async fn error_page(resp: Response) -> Response {
+async fn error_page(resp: Response, lang: calzone_core::quickadd::Lang) -> Response {
+    let a = i18n::a(lang);
     let status = resp.status();
     let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024).await.unwrap_or_default();
     let fragment = String::from_utf8_lossy(&bytes);
     let page = format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" \
-         content=\"width=device-width, initial-scale=1\"><title>CalZone</title><link rel=\"stylesheet\" \
+        "<!doctype html><html lang=\"{}\" data-theme=\"dark\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" \
+         content=\"width=device-width, initial-scale=1\"><meta name=\"color-scheme\" content=\"dark\"><title>CalZone</title><link rel=\"stylesheet\" \
          href=\"/static/app.css\"></head><body><main class=\"page auth\"><section class=\"panel\">{fragment}\
-         <p>Use your browser's back button, or <a href=\"/\">start over</a>.</p></section></main></body></html>"
+         <p>{} <a href=\"/\">{}</a>.</p></section></main></body></html>",
+        i18n::code(lang),
+        escape(a.back_or),
+        escape(a.start_over)
     );
     (status, Html(page)).into_response()
 }
@@ -189,11 +247,13 @@ async fn error_page(resp: Response) -> Response {
 pub struct WebError {
     pub status: StatusCode,
     pub message: String,
+    /// A generic error the guard translates (`not_found`, ...).
+    pub key: Option<&'static str>,
 }
 
 impl WebError {
     pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
-        Self { status, message: message.into() }
+        Self { status, message: message.into(), key: None }
     }
 
     pub fn bad(message: impl Into<String>) -> Self {
@@ -218,7 +278,15 @@ impl From<DomainError> for WebError {
             }
             other => (StatusCode::BAD_REQUEST, capitalise(&other.to_string())),
         };
-        WebError::new(status, msg)
+        let key = match status {
+            StatusCode::NOT_FOUND => Some("not_found"),
+            StatusCode::FORBIDDEN => Some("read_only"),
+            StatusCode::CONFLICT => Some("name_taken"),
+            StatusCode::INTERNAL_SERVER_ERROR => Some("server"),
+            _ if msg.starts_with("Use 1 to 64") => Some("bad_name"),
+            _ => None,
+        };
+        WebError { status, message: msg, key }
     }
 }
 
@@ -241,6 +309,9 @@ impl IntoResponse for WebError {
         let h = r.headers_mut();
         h.insert("hx-retarget", HeaderValue::from_static("#flash"));
         h.insert("hx-reswap", HeaderValue::from_static("innerHTML"));
+        if let Some(k) = self.key {
+            h.insert("x-cz-generic", HeaderValue::from_static(k));
+        }
         r
     }
 }
@@ -258,6 +329,8 @@ pub struct Nav {
     /// `dark`, `light` or `system` (decision 36).
     pub theme: &'static str,
     pub t: &'static i18n::T,
+    /// The admin pages' strings.
+    pub a: &'static i18n::A,
 }
 
 /// A stored theme as one of the three values the CSS knows.
@@ -279,6 +352,7 @@ impl Nav {
             lang: i18n::code(u.lang),
             theme: theme(&u.account.theme),
             t: i18n::t(u.lang),
+            a: i18n::a(u.lang),
         }
     }
 

@@ -350,7 +350,9 @@
     }
     if (Object.keys(body).length === 0) { closePanel(); return; }
     var recurring = form.getAttribute("data-recurring") === "1";
-    var go = recurring ? askScope(T.scope_edit) : Promise.resolve("all");
+    // Reminders are yours and cover every occurrence: no scope question.
+    var remindersOnly = Object.keys(body).length === 1 && body.alarms !== undefined;
+    var go = recurring && !remindersOnly ? askScope(T.scope_edit) : Promise.resolve("all");
     go.then(function (scope) {
       if (!scope) return;
       body.etag = form.getAttribute("data-etag");
@@ -382,8 +384,151 @@
 
   panel.addEventListener("submit", function (e) {
     if (e.target.id === "ev-form") { e.preventDefault(); save(e.target); }
+    if (e.target.id === "cal-prefs") { e.preventDefault(); savePrefs(e.target); }
+    if (e.target.classList.contains("cal-share")) { e.preventDefault(); share(e.target); }
+    if (e.target.id === "cal-link") { e.preventDefault(); makeLink(e.target); }
+    if (e.target.id === "cal-subscribe") { e.preventDefault(); subscribe(e.target); }
   });
+
+  // ---- The calendar list ----------------------------------------------------
+
+  var calBody = document.getElementById("cal-body");
+  var listToggle = root.querySelector("[data-cal=list]");
+  var LIST_KEY = "calzone.calendarList";
+  function wide() { return window.matchMedia("(min-width: 64rem)").matches; }
+  function setList(open) {
+    calBody.classList.toggle("list-closed", !open);
+    listToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  function toggleList() {
+    var open = calBody.classList.contains("list-closed");
+    setList(open);
+    try { localStorage.setItem(LIST_KEY, open ? "open" : "closed"); } catch (err) { /* private window */ }
+  }
+  var remembered = null;
+  try { remembered = localStorage.getItem(LIST_KEY); } catch (err) { remembered = null; }
+  // Open beside the grid on a desk, folded away on a phone, unless chosen.
+  setList(remembered ? remembered === "open" : wide());
+
+  function prefsOf(id) {
+    var li = root.querySelector("[data-cal-id='" + id + "']");
+    return li ? JSON.parse(li.getAttribute("data-prefs")) : {};
+  }
+  function postPrefs(id, prefs) {
+    return api("POST", "/api/calendars/" + encodeURIComponent(id) + "/prefs", prefs);
+  }
+
+  root.addEventListener("change", function (e) {
+    if (!e.target.hasAttribute("data-cal-show")) return;
+    var li = e.target.closest("[data-cal-id]");
+    var id = li.getAttribute("data-cal-id");
+    var prefs = prefsOf(id);
+    prefs.hidden = !e.target.checked;
+    postPrefs(id, prefs).then(function (r) {
+      if (r.ok) { li.setAttribute("data-prefs", JSON.stringify(prefs)); refresh(); }
+      else { e.target.checked = !e.target.checked; failed(r); }
+    });
+  });
+
+  function savePrefs(form) {
+    var id = form.getAttribute("data-id");
+    var prefs = prefsOf(id);
+    var f = form.elements;
+    prefs.display_name = f.display_name.value.trim() || null;
+    // Only a colour picked here becomes yours; otherwise you keep following
+    // the calendar's own.
+    if (f.color.value !== form.getAttribute("data-color")) prefs.color = f.color.value;
+    prefs.default_alarm = f.default_alarm.value === "none" ? null : parseInt(f.default_alarm.value, 10);
+    postPrefs(id, prefs).then(function (r) {
+      if (r.ok) { location.reload(); } else { failed(r); }
+    });
+  }
+
+  function share(form) {
+    fetch(form.action, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(new FormData(form)).toString()
+    }).then(function (r) {
+      // Show the sheet again with the new sharing.
+      var prefsForm = document.getElementById("cal-prefs");
+      if (r.ok && prefsForm) loadPanel("/calendar/settings/" + encodeURIComponent(prefsForm.getAttribute("data-id")));
+      else failed({ status: r.status, data: null });
+    }, function () { failed({ status: 0 }); });
+  }
+  // ---- Feeds: secret links and subscriptions (decision 41) -------------------
+
+  function sheetId(sel) {
+    var s = panel.querySelector(sel);
+    return s ? s.getAttribute("data-id") : null;
+  }
+  function reloadSheet(id) { loadPanel("/calendar/settings/" + encodeURIComponent(id)); }
+
+  function makeLink(form) {
+    var id = sheetId("#cal-links");
+    var f = form.elements;
+    api("POST", "/api/calendars/" + encodeURIComponent(id) + "/links", { label: f.label.value.trim(), detail: f.detail.value }).then(function (r) {
+      if (!r.ok) { failed(r); return; }
+      // Shown once: only its hash is kept.
+      var box = panel.querySelector(".cal-link-made");
+      box.querySelector("[data-link=webcal]").value = r.data.webcal;
+      box.querySelector("[data-link=url]").value = r.data.url;
+      box.hidden = false;
+      form.reset();
+      box.querySelector("[data-link=webcal]").select();
+    });
+  }
+  function revokeLink(b) {
+    api("POST", "/api/links/" + encodeURIComponent(b.getAttribute("data-id")) + "/revoke", {}).then(function (r) {
+      if (r.ok) reloadSheet(sheetId("#cal-links")); else failed(r);
+    });
+  }
+  function copyLink(b) {
+    var input = panel.querySelector("[data-link=" + b.getAttribute("data-copy") + "]");
+    if (!input) return;
+    input.select();
+    var done = function () { toast(T.copied); };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(input.value).then(done, function () { /* selected for a manual copy */ });
+    } else {
+      try { if (document.execCommand("copy")) done(); } catch (err) { /* selected for a manual copy */ }
+    }
+  }
+  function subscribe(form) {
+    var f = form.elements;
+    var btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    toast(T.checking_feed);
+    api("POST", "/api/subscriptions", { url: f.url.value.trim(), name: f.name.value.trim(), interval: parseInt(f.interval.value, 10) }).then(function (r) {
+      btn.disabled = false;
+      if (r.ok) location.reload(); else failed(r);
+    });
+  }
+  function subRefresh(b) {
+    var id = sheetId("#cal-sub");
+    b.disabled = true;
+    api("POST", "/api/subscriptions/" + encodeURIComponent(id) + "/refresh", {}).then(function (r) {
+      b.disabled = false;
+      if (r.ok) { toast(r.data.changed ? T.refreshed : T.up_to_date); refresh(); }
+      else failed(r);
+      reloadSheet(id);
+    });
+  }
+  function subDelete() {
+    var id = sheetId("#cal-sub");
+    if (!window.confirm(T.unsubscribe_q)) return;
+    api("POST", "/api/subscriptions/" + encodeURIComponent(id) + "/delete", {}).then(function (r) {
+      if (r.ok) location.reload(); else failed(r);
+    });
+  }
+
   panel.addEventListener("change", function (e) {
+    if (e.target.hasAttribute("data-cal-interval")) {
+      api("POST", "/api/subscriptions/" + encodeURIComponent(sheetId("#cal-sub")) + "/interval", { minutes: parseInt(e.target.value, 10) }).then(function (r) {
+        if (!r.ok) failed(r);
+      });
+    }
     if (e.target.name === "all_day") {
       panel.querySelectorAll("[data-timed]").forEach(function (el) { el.hidden = e.target.checked; });
     }
@@ -436,6 +581,13 @@
       case "close": closePanel(); break;
       case "undo": undo(); break;
       case "delete": remove(document.getElementById("ev-form")); break;
+      case "list": toggleList(); break;
+      case "cal-settings": loadPanel("/calendar/settings/" + encodeURIComponent(b.getAttribute("data-id"))); break;
+      case "subscribe": loadPanel("/calendar/subscribe"); break;
+      case "revoke-link": revokeLink(b); break;
+      case "copy": copyLink(b); break;
+      case "sub-refresh": subRefresh(b); break;
+      case "sub-delete": subDelete(); break;
     }
   }
 

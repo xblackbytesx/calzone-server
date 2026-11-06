@@ -205,6 +205,29 @@ step 5 replaces the latter with the calendar list.
   (decision 29), and see who has which level.
 - Settings: time zone, first day of the week, 24-hour clock.
 
+**Done 2026-11-06** (decision 40), with three items carried over from
+earlier steps:
+- reminders on calendars you can only view;
+- every remaining page and message in Dutch;
+- a phone navigation with a "More" menu.
+
+Found while building:
+- Undo needed write access, so a reader could not undo their own
+  reminder.
+- Long calendar names pushed the settings button out of the list, under
+  the grid.
+- The calendar grew wider than a phone once the list button joined the
+  toolbar. The browser check now also flags any element past the screen's
+  edge, not only page-wide scrolling.
+
+Verified:
+- 175 workspace tests, including reader reminders, the calendar list and
+  sheet, preferences, and every page for a Dutch user with no common
+  English words left.
+- Headless Chromium against the real binary: hide and show, my name, a
+  share from the sheet, folding the list, the phone "More" menu, and every
+  admin page in light Dutch. Step 3's calendar flow re-run unchanged.
+
 ## Step 6: ICS feeds
 
 - **Publishing:** a secret link per calendar, at full or busy-only detail,
@@ -224,6 +247,31 @@ step 5 replaces the latter with the calendar list.
     if it parsed completely and is not empty. Then removed UIDs go, the
     rest goes through `upsert`.
 - Both managed from the calendar list.
+
+**Done 2026-11-06** (decision 41). A replace writes changed objects
+straight through the store under the collection lock, not `upsert`, so a
+whole refresh is one transaction.
+
+Found while building:
+- A changed refresh would have wiped the owner's own reminders on that
+  event: the feed's empty alarm layer replaced theirs. Refreshes now store
+  the shared part only, and a test sets a reminder on a subscribed event,
+  changes it at the source and checks the reminder stays.
+- A failed "Refresh now" answered 502, which the access log records as a
+  server error every time an outside feed breaks; it is 422 now.
+
+Verified:
+- 185 workspace tests, among them: full and busy feeds (private events
+  busy, free time and reminders left out, ETag and 304, the busy title in
+  the maker's language), revocation and disabled owners as 404; a
+  subscription to our own published link over HTTP that follows adds,
+  changes and removals; a broken source (HTTP 500, empty, not iCalendar,
+  one bad entry) keeping the last good copy with a translated error;
+  read-only through the store and the API; private addresses refused.
+- Headless Chromium against the real binary: make a busy link, copy it,
+  subscribe to it, refresh, change the interval, the read-only panel,
+  revoke (the copy keeps its events and shows the error), unsubscribe;
+  desk dark and phone light Dutch, nothing past the edge.
 
 ## Step 7: polish and the household test
 

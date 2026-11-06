@@ -10,7 +10,7 @@ use axum::response::{IntoResponse, Redirect};
 use uuid::Uuid;
 
 use super::session::WebUser;
-use super::{Nav, Page, WebError, base_url, html};
+use super::{Nav, Page, WebError, base_url, html, i18n};
 use crate::AppState;
 use crate::domain::app_passwords::{self, Scope};
 use crate::domain::{Access, Collection, CollectionKind, collections};
@@ -43,27 +43,30 @@ async fn everything(st: &AppState, user: &WebUser) -> Result<Vec<Collection>, We
     Ok(all)
 }
 
-fn name(c: &Collection) -> String {
+fn name(c: &Collection, a: &'static i18n::A) -> String {
     let n = if c.display_name.is_empty() { &c.slug } else { &c.display_name };
-    let kind = if c.kind == CollectionKind::Calendar { "calendar" } else { "address book" };
+    let kind = if c.kind == CollectionKind::Calendar { a.word_calendar } else { a.word_book };
     if c.access == Access::Owner { format!("{n} ({kind})") } else { format!("{n} ({kind}, {})", c.owner_name) }
 }
 
 pub async fn list(State(st): State<AppState>, user: WebUser) -> Page {
+    let a = i18n::a(user.lang);
     let all = everything(&st, &user).await?;
     let mut devices = Vec::new();
     for p in app_passwords::list(&st.pool, user.id()).await? {
         let scope = match &p.scope {
-            None => "Everything you can reach".to_string(),
+            None => a.everything.to_string(),
             Some(s) => {
                 let mut parts: Vec<String> = all
                     .iter()
                     .filter_map(|c| {
-                        s.get(&c.id).map(|a| format!("{} {}", name(c), if a.can_write() { "(edit)" } else { "(view)" }))
+                        s.get(&c.id).map(|acc| {
+                            format!("{} {}", name(c, a), if acc.can_write() { a.tag_edit } else { a.tag_view })
+                        })
                     })
                     .collect();
                 parts.sort();
-                if parts.is_empty() { "Nothing any more".to_string() } else { parts.join(", ") }
+                if parts.is_empty() { a.nothing_any_more.to_string() } else { parts.join(", ") }
             }
         };
         devices.push(DeviceRow {
@@ -71,10 +74,10 @@ pub async fn list(State(st): State<AppState>, user: WebUser) -> Page {
             label: p.label,
             scope,
             created: p.created_at.format("%Y-%m-%d").to_string(),
-            used: p.last_used_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_else(|| "never".into()),
+            used: p.last_used_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_else(|| a.never.into()),
         });
     }
-    let choices = all.iter().map(|c| Choice { id: c.id, label: name(c), writable: c.access.can_write() }).collect();
+    let choices = all.iter().map(|c| Choice { id: c.id, label: name(c, a), writable: c.access.can_write() }).collect();
     html(DevicesPage { nav: Nav::new(&st, &user, "devices"), devices, choices })
 }
 
@@ -93,7 +96,7 @@ struct CreatedPage {
 /// are dynamic.
 pub async fn create(State(st): State<AppState>, user: WebUser, headers: HeaderMap, RawForm(body): RawForm) -> Page {
     let fields: HashMap<String, String> = serde_urlencoded::from_bytes::<Vec<(String, String)>>(&body)
-        .map_err(|_| WebError::bad("Bad form."))?
+        .map_err(|_| WebError::bad(i18n::a(user.lang).err_bad_form))?
         .into_iter()
         .collect();
     let label = fields.get("label").map(|s| s.trim().to_string()).unwrap_or_default();
@@ -108,7 +111,7 @@ pub async fn create(State(st): State<AppState>, user: WebUser, headers: HeaderMa
             };
         }
         if s.is_empty() {
-            return Err(WebError::bad("Pick at least one calendar or address book, or allow everything."));
+            return Err(WebError::bad(i18n::a(user.lang).err_pick_one));
         }
         Some(s)
     } else {

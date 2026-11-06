@@ -16,7 +16,7 @@ use crate::AppState;
 use crate::audit::{self, Reason, Service};
 use crate::client::ClientAddr;
 use crate::domain::accounts::{self, MIN_PASSPHRASE};
-use crate::domain::two_factor;
+use crate::domain::{prefs, two_factor};
 
 /// Web login failures allowed per address and per account in a window.
 pub(super) const PER_ADDRESS: u32 = 10;
@@ -128,23 +128,36 @@ struct SettingsPage {
     has_totp: bool,
     totp_required: bool,
     codes_left: i64,
+    /// `browser`, `en` or `nl`.
+    language: &'static str,
+    theme: &'static str,
+    timezone: String,
+    zones: Vec<&'static str>,
+    week_start: i16,
+    clock_24h: bool,
 }
 
 pub async fn settings(State(st): State<AppState>, user: WebUser, RawQuery(q): RawQuery) -> Page {
-    let used = q.as_deref() == Some("recovery=used");
-    settings_page(
-        &st,
-        &user,
-        used.then_some(
-            "You signed in with a recovery code; it no longer works. Make new codes below when few are left.",
-        ),
-    )
-    .await
+    let a = i18n::a(user.lang);
+    let saved = match q.as_deref() {
+        Some("recovery=used") => Some(a.recovery_used),
+        Some("saved=preferences") => Some(a.prefs_saved),
+        _ => None,
+    };
+    settings_page(&st, &user, saved).await
+}
+
+/// Every IANA zone, for the picker.
+fn zones() -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = chrono_tz::TZ_VARIANTS.iter().map(|z| z.name()).collect();
+    v.sort_unstable();
+    v
 }
 
 pub async fn settings_page(st: &AppState, user: &WebUser, saved: Option<&'static str>) -> Page {
     let codes_left =
         if user.account.has_totp { two_factor::unused_recovery_codes(&st.pool, user.id()).await? } else { 0 };
+    let s = prefs::settings(&st.pool, user.id()).await?;
     html(SettingsPage {
         nav: Nav::new(st, user, "settings"),
         name: user.account.name.clone(),
@@ -154,7 +167,42 @@ pub async fn settings_page(st: &AppState, user: &WebUser, saved: Option<&'static
         has_totp: user.account.has_totp,
         totp_required: st.two_factor.required_for(user.account.is_admin),
         codes_left,
+        language: match s.language.as_deref() {
+            Some("en") => "en",
+            Some("nl") => "nl",
+            _ => "browser",
+        },
+        theme: super::theme(&s.theme),
+        timezone: s.timezone.unwrap_or_else(|| st.default_timezone.name().to_string()),
+        zones: zones(),
+        week_start: s.week_start,
+        clock_24h: s.clock_24h,
     })
+}
+
+#[derive(Deserialize)]
+pub struct PreferencesForm {
+    language: String,
+    theme: String,
+    timezone: String,
+    week_start: i16,
+    clock: String,
+}
+
+/// Language, theme, time zone, week start and clock (decisions 35, 36).
+pub async fn save_preferences(State(st): State<AppState>, user: WebUser, Form(f): Form<PreferencesForm>) -> Page {
+    let change = prefs::SettingsChange {
+        timezone: Some(f.timezone),
+        language: Some(match f.language.as_str() {
+            "en" | "nl" => Some(f.language.clone()),
+            _ => None,
+        }),
+        theme: Some(f.theme),
+        week_start: Some(f.week_start),
+        clock_24h: Some(f.clock != "12"),
+    };
+    prefs::update_settings(&st.pool, user.id(), &change).await?;
+    Ok(Redirect::to("/settings?saved=preferences").into_response())
 }
 
 #[derive(Deserialize)]
@@ -178,16 +226,16 @@ pub struct PassphraseForm {
 /// starts a fresh one here, so other browsers are signed out.
 pub async fn change_passphrase(State(st): State<AppState>, user: WebUser, Form(f): Form<PassphraseForm>) -> Page {
     if f.new != f.repeat {
-        return Err(WebError::bad("The two new passphrases differ."));
+        return Err(WebError::bad(i18n::a(user.lang).err_passphrases_differ));
     }
     if !accounts::passphrase_matches(&st.pool, user.id(), &f.current).await? {
-        return Err(WebError::new(StatusCode::FORBIDDEN, "Your current passphrase is not right."));
+        return Err(WebError::new(StatusCode::FORBIDDEN, i18n::a(user.lang).err_current_wrong));
     }
     accounts::set_passphrase(&st.pool, user.id(), &f.new).await?;
     // The new session keeps this one's "keep me signed in" choice.
     let persistent = accounts::session_persistent(&st.pool, &user.token).await?;
     let token = accounts::create_session(&st.pool, user.id(), persistent).await?;
-    let mut r = settings_page(&st, &user, Some("Passphrase changed. Other browsers are signed out.")).await?;
+    let mut r = settings_page(&st, &user, Some(i18n::a(user.lang).passphrase_changed)).await?;
     if let Ok(v) = session::session_cookie(&token, st.cookie_secure, persistent).parse() {
         r.headers_mut().insert(SET_COOKIE, v);
     }

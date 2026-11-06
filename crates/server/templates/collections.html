@@ -1,11 +1,11 @@
 {% extends "layout.html" %}
-{% block title %}Calendars &amp; contacts · CalZone{% endblock %}
+{% block title %}{{ nav.a.manage_title }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>Calendars &amp; contacts</h1><p class="meta">Yours and the ones shared with you.</p></div></header>
+<header class="page-header"><div><h1>{{ nav.a.manage_title }}</h1><p class="meta">{{ nav.a.manage_meta }}</p></div></header>
 <div class="panels">
   <section class="panel">
-    <h2>Calendars</h2>
-    {% if calendars.is_empty() %}<p class="empty">No calendars yet.</p>{% else %}
+    <h2>{{ nav.t.calendars }}</h2>
+    {% if calendars.is_empty() %}<p class="empty">{{ nav.a.no_calendars }}</p>{% else %}
     <ul class="rows">
       {% for r in calendars %}
       <li><svg class="swatch" viewBox="0 0 1 1" aria-hidden="true"><rect width="1" height="1" fill="{{ r.color }}"/></svg>
@@ -14,8 +14,8 @@
     </ul>{% endif %}
   </section>
   <section class="panel">
-    <h2>Address books</h2>
-    {% if books.is_empty() %}<p class="empty">No address books yet.</p>{% else %}
+    <h2>{{ nav.a.address_books }}</h2>
+    {% if books.is_empty() %}<p class="empty">{{ nav.a.no_books }}</p>{% else %}
     <ul class="rows">
       {% for r in books %}
       <li><div class="row-main"><a class="row-title" href="/collections/{{ r.id }}">{{ r.name }}</a>{% if !r.shared.is_empty() %}<span class="meta">{{ r.shared }}</span>{% endif %}</div></li>
@@ -23,15 +23,15 @@
     </ul>{% endif %}
   </section>
   <section class="panel">
-    <h2>Add one</h2>
+    <h2>{{ nav.a.add_one }}</h2>
     <form method="post" action="/collections" class="form">
-      <fieldset><legend>Kind</legend>
-        <label class="checkbox"><input type="radio" name="kind" value="calendar" checked> Calendar</label>
-        <label class="checkbox"><input type="radio" name="kind" value="addressbook"> Address book</label>
+      <fieldset><legend>{{ nav.t.kind_label }}</legend>
+        <label class="checkbox"><input type="radio" name="kind" value="calendar" checked> {{ nav.t.calendar }}</label>
+        <label class="checkbox"><input type="radio" name="kind" value="addressbook"> {{ nav.t.address_book }}</label>
       </fieldset>
-      <label class="field">Name <input type="text" name="name" maxlength="100" required placeholder="Family"></label>
-      <label class="field">Colour <span class="hint">Calendars only.</span><input type="color" name="color" value="#3a7bd5"></label>
-      <button type="submit" class="primary">Add</button>
+      <label class="field">{{ nav.t.name }} <input type="text" name="name" maxlength="100" required placeholder="{{ nav.a.name_placeholder }}"></label>
+      <label class="field">{{ nav.a.colour }} <span class="hint">{{ nav.a.colour_hint }}</span><input type="color" name="color" value="#3a7bd5"></label>
+      <button type="submit" class="primary">{{ nav.a.add }}</button>
     </form>
   </section>
 </div>

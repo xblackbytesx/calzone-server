@@ -136,14 +136,14 @@ pub async fn confirm(State(st): State<AppState>, SignedIn(user): SignedIn, Form(
             let user = WebUser { account: accounts::get(&st.pool, user.id()).await?, ..user };
             html(CodesPage { nav: Nav::new(&st, &user, "settings"), codes, first: true })
         }
-        None => Err(WebError::bad("That code is not right. Check the time on your phone, and use the newest code.")),
+        None => Err(WebError::bad(i18n::a(user.lang).err_tf_setup_wrong)),
     }
 }
 
 /// New recovery codes, with a current code from the app to prove it is you.
 pub async fn new_codes(State(st): State<AppState>, user: WebUser, Form(f): Form<CodeForm>) -> Page {
     if two_factor::check(&st.pool, key(&st)?, user.id(), &f.code, now()).await? != Some(Accepted::App) {
-        return Err(WebError::new(StatusCode::FORBIDDEN, "That code from your app is not right."));
+        return Err(WebError::new(StatusCode::FORBIDDEN, i18n::a(user.lang).err_tf_wrong));
     }
     let codes = two_factor::new_recovery_codes(&st.pool, user.id()).await?;
     html(CodesPage { nav: Nav::new(&st, &user, "settings"), codes, first: false })
@@ -159,12 +159,12 @@ pub struct OffForm {
 /// someone who must use it. Every session ends; the person logs in again.
 pub async fn turn_off(State(st): State<AppState>, user: WebUser, Form(f): Form<OffForm>) -> Page {
     if st.two_factor.required_for(user.account.is_admin) {
-        return Err(WebError::bad("Two-factor sign-in is required for your account on this server."));
+        return Err(WebError::bad(i18n::a(user.lang).err_tf_required));
     }
     if !accounts::passphrase_matches(&st.pool, user.id(), &f.passphrase).await?
         || two_factor::check(&st.pool, key(&st)?, user.id(), &f.code, now()).await?.is_none()
     {
-        return Err(WebError::new(StatusCode::FORBIDDEN, "The passphrase or the code is not right."));
+        return Err(WebError::new(StatusCode::FORBIDDEN, i18n::a(user.lang).err_tf_off_wrong));
     }
     two_factor::disable(&st.pool, user.id()).await?;
     Ok(([(SET_COOKIE, session::cookie("", 0, st.cookie_secure))], Redirect::to("/login")).into_response())

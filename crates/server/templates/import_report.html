@@ -1,33 +1,33 @@
 {% extends "layout.html" %}
-{% block title %}Import · CalZone{% endblock %}
+{% block title %}{{ nav.a.import_h }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>Import</h1><p class="meta">{{ i.source }}, into {{ i.principal_name }}</p></div>
-<div class="page-actions"><a class="button quiet" href="/import">Import &amp; export</a></div></header>
+<header class="page-header"><div><h1>{{ nav.a.import_h }}</h1><p class="meta">{{ i.source }}, {{ nav.a.into }} {{ i.principal_name }}</p></div>
+<div class="page-actions"><a class="button quiet" href="/import">{{ nav.a.import_title }}</a></div></header>
 <div class="panels" id="report"{% if running %} hx-get="/import/{{ i.id }}" hx-trigger="every 2s" hx-select="#report" hx-swap="outerHTML"{% endif %}>
   <section class="panel">
-    <h2>{% if running %}Importing…{% else %}Result{% endif %}</h2>
+    <h2>{% if running %}{{ nav.a.importing }}{% else %}{{ nav.a.result }}{% endif %}</h2>
     <p><span class="badge{% if i.status.as_str() == "done" %} ok{% else if running %}{% else %} warn{% endif %}">{{ status }}</span> {{ totals }}</p>
     {% if !i.message.is_empty() %}<p class="notice error" role="alert">{{ i.message }}</p>{% endif %}
-    <p class="hint">Started {{ i.created_at.format("%Y-%m-%d %H:%M:%S UTC") }}{% if !finished.is_empty() %}, finished {{ finished }}{% endif %}.{% if running %} This page updates by itself; you can also leave it, the import keeps going.{% endif %}</p>
-    {% if rows.is_empty() %}<p class="empty">Nothing yet.</p>{% else %}
+    <p class="hint">{{ nav.a.started }} {{ i.created_at.format("%Y-%m-%d %H:%M:%S UTC") }}{% if !finished.is_empty() %}, {{ nav.a.finished }} {{ finished }}{% endif %}.{% if running %} {{ nav.a.keeps_going }}{% endif %}</p>
+    {% if rows.is_empty() %}<p class="empty">{{ nav.a.nothing_yet }}</p>{% else %}
     <ul class="rows">
       {% for r in rows %}
       <li><div class="row-main">
         {% if let Some(id) = r.id %}<a class="row-title" href="/collections/{{ id }}">{{ r.name }}</a>{% else %}<span class="row-title">{{ r.name }}</span>{% endif %}
-        <span class="meta">{{ r.created }} new, {{ r.updated }} updated, {{ r.unchanged }} unchanged{% if r.failed > 0 %}, {{ r.failed }} not imported{% endif %}</span>
-        {% if r.new_collection %}<span class="hint">Made by this import.</span>{% endif %}
+        <span class="meta">{{ r.created }} {{ nav.a.n_new }}, {{ r.updated }} {{ nav.a.n_updated }}, {{ r.unchanged }} {{ nav.a.n_unchanged }}{% if r.failed > 0 %}, {{ r.failed }} {{ nav.a.n_not_imported }}{% endif %}</span>
+        {% if r.new_collection %}<span class="hint">{{ nav.a.made_by_import }}</span>{% endif %}
       </div></li>
       {% endfor %}
     </ul>{% endif %}
   </section>
   {% if !failures.is_empty() %}
   <section class="panel">
-    <h2>Not imported</h2>
-    <p>These entries could not be stored. Nothing was thrown away: each one can be downloaded exactly as it arrived, to fix and import again or to keep.</p>
+    <h2>{{ nav.a.not_imported }}</h2>
+    <p>{{ nav.a.not_imported_text }}</p>
     <ul class="rows">
       {% for f in failures %}
       <li><div class="row-main"><span class="row-title">{{ f.collection }}</span><span class="meta">{{ f.reason }}</span></div>
-        <div class="row-actions"><a class="button compact quiet" href="/import/{{ i.id }}/failed/{{ f.position }}" hx-boost="false" download>Download</a></div></li>
+        <div class="row-actions"><a class="button compact quiet" href="/import/{{ i.id }}/failed/{{ f.position }}" hx-boost="false" download>{{ nav.a.download }}</a></div></li>
       {% endfor %}
     </ul>
   </section>

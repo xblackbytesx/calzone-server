@@ -1,0 +1,16 @@
+<div class="sheet" role="dialog" aria-modal="false" aria-labelledby="sub-heading">
+  <header class="sheet-header">
+    <h2 id="sub-heading">{{ t.subscribe }}</h2>
+    <button type="button" class="quiet compact" data-cal="close">{{ t.close }}</button>
+  </header>
+  <p class="hint sheet-meta">{{ t.subscribe_hint }}</p>
+  <form id="cal-subscribe" class="form" autocomplete="off">
+    <label class="field">{{ t.feed_address }}
+      <input type="text" name="url" inputmode="url" required maxlength="2000" placeholder="webcal://…" spellcheck="false"></label>
+    <label class="field">{{ t.name }} <span class="hint">{{ t.subscribe_name_hint }}</span>
+      <input type="text" name="name" maxlength="100"></label>
+    <label class="field">{{ t.refresh_every }}
+      <select name="interval">{% for (m, label) in intervals %}<option value="{{ m }}"{% if *m == 60 %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <div class="form-actions"><button type="submit" class="primary">{{ t.subscribe_btn }}</button></div>
+  </form>
+</div>

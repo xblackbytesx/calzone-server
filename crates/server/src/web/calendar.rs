@@ -41,7 +41,7 @@ async fn writable(st: &AppState, user: &WebUser) -> Result<Vec<Cal>, WebError> {
     let mut out: Vec<(i32, bool, Cal)> = collections::visible(&st.pool, user.id(), CollectionKind::Calendar)
         .await?
         .into_iter()
-        .filter(|c| c.access.can_write())
+        .filter(|c| c.access.can_write() && !c.subscribed)
         .filter_map(|c| {
             let pr = p.get(&c.id).cloned().unwrap_or_default();
             if pr.hidden {
@@ -63,6 +63,59 @@ async fn writable(st: &AppState, user: &WebUser) -> Result<Vec<Cal>, WebError> {
     Ok(out.into_iter().map(|x| x.2).collect())
 }
 
+/// One row of the calendar list: every calendar the person can see,
+/// hidden ones too.
+pub struct ListRow {
+    pub id: Uuid,
+    pub name: String,
+    pub color: String,
+    pub own: bool,
+    pub owner: String,
+    pub owner_initials: String,
+    pub hidden: bool,
+    pub subscribed: bool,
+    /// The person's stored settings as JSON, so the script can resend the
+    /// others when it flips "show".
+    pub prefs: String,
+}
+
+async fn list_rows(st: &AppState, user: &WebUser) -> Result<Vec<ListRow>, WebError> {
+    let p = prefs::calendar_prefs(&st.pool, user.id()).await?;
+    let labels: std::collections::HashMap<Uuid, String> =
+        crate::domain::accounts::list(&st.pool).await?.into_iter().map(|a| (a.id, a.label().to_string())).collect();
+    let mut rows: Vec<(i32, bool, ListRow)> = collections::visible(&st.pool, user.id(), CollectionKind::Calendar)
+        .await?
+        .into_iter()
+        .map(|c| {
+            let pr = p.get(&c.id).cloned().unwrap_or_default();
+            let base = if c.display_name.is_empty() { c.slug.clone() } else { c.display_name.clone() };
+            let owner = labels.get(&c.owner_id).cloned().unwrap_or_else(|| c.owner_name.clone());
+            let prefs_json = serde_json::json!({
+                "color": pr.color, "display_name": pr.display_name, "hidden": pr.hidden,
+                "sort_order": pr.sort_order, "default_alarm": pr.default_alarm,
+            })
+            .to_string();
+            (
+                pr.sort_order.unwrap_or(i32::MAX),
+                c.owner_id != user.id(),
+                ListRow {
+                    id: c.id,
+                    name: pr.display_name.unwrap_or(base),
+                    color: crate::web::color_input(pr.color.as_deref().or(c.color.as_deref())),
+                    own: c.owner_id == user.id(),
+                    owner_initials: super::contacts::initials(&owner),
+                    owner,
+                    hidden: pr.hidden,
+                    subscribed: c.subscribed,
+                    prefs: prefs_json,
+                },
+            )
+        })
+        .collect();
+    rows.sort_by(|a, b| (a.0, a.1, a.2.name.to_lowercase()).cmp(&(b.0, b.1, b.2.name.to_lowercase())));
+    Ok(rows.into_iter().map(|r| r.2).collect())
+}
+
 #[derive(Template)]
 #[template(path = "calendar.html")]
 struct CalendarPage {
@@ -70,6 +123,7 @@ struct CalendarPage {
     strings: String,
     config: String,
     has_calendar: bool,
+    list: Vec<ListRow>,
 }
 
 pub async fn page(State(st): State<AppState>, user: WebUser) -> Page {
@@ -83,7 +137,9 @@ pub async fn page(State(st): State<AppState>, user: WebUser) -> Page {
         calendars,
     };
     let has_calendar = !config.calendars.is_empty();
+    let list = list_rows(&st, &user).await?;
     html(CalendarPage {
+        list,
         nav: Nav::new(&st, &user, "calendar"),
         strings: serde_json::to_string(i18n::t(user.lang)).expect("strings serialize"),
         config: serde_json::to_string(&config).expect("config serializes"),
@@ -258,4 +314,155 @@ impl IfEmpty for String {
     fn if_empty(self, default: &str) -> String {
         if self.is_empty() { default.to_string() } else { self }
     }
+}
+
+pub struct GrantView {
+    pub id: Uuid,
+    pub label: String,
+    pub level: &'static str,
+}
+
+#[derive(Template)]
+#[template(path = "calendar_settings.html")]
+struct SettingsSheet {
+    t: &'static i18n::T,
+    id: Uuid,
+    base_name: String,
+    my_name: String,
+    color: String,
+    alarm_value: String,
+    alarms: Vec<(String, &'static str)>,
+    level: &'static str,
+    own: bool,
+    owner: String,
+    can_admin: bool,
+    grants: Vec<GrantView>,
+    candidates: Vec<(Uuid, String)>,
+    /// Secret links, for a calendar the person may share (not a subscribed one).
+    links: Vec<LinkView>,
+    sub: Option<SubView>,
+}
+
+struct LinkView {
+    id: Uuid,
+    label: String,
+    detail: &'static str,
+    created: String,
+    last_used: String,
+}
+
+struct SubView {
+    host: String,
+    last_refresh: String,
+    error: String,
+    interval: i32,
+    intervals: Vec<(i32, &'static str)>,
+    can_admin: bool,
+}
+
+fn level_words(t: &'static i18n::T, a: crate::domain::Access) -> &'static str {
+    use crate::domain::Access;
+    match a {
+        Access::Read => t.can_view,
+        Access::Write => t.can_edit,
+        Access::Admin | Access::Owner => t.can_share,
+    }
+}
+
+/// `GET /calendar/settings/{id}`: the person's own settings for one
+/// calendar, and its sharing when they may share it.
+pub async fn settings_sheet(
+    State(st): State<AppState>,
+    user: WebUser,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> Page {
+    let t = i18n::t(user.lang);
+    let c = collections::get(&st.pool, user.id(), id).await?;
+    if c.kind != CollectionKind::Calendar {
+        return Err(crate::domain::DomainError::NotFound.into());
+    }
+    let pr = prefs::calendar_prefs(&st.pool, user.id()).await?.remove(&id).unwrap_or_default();
+    let everyone = crate::domain::accounts::list(&st.pool).await?;
+    let label = |a: &crate::domain::accounts::Account| {
+        if a.is_group() {
+            format!("{} ({})", a.label(), a.name)
+        } else if a.display_name.is_empty() {
+            a.name.clone()
+        } else {
+            format!("{} ({})", a.label(), a.name)
+        }
+    };
+    let can_admin = c.access.can_admin();
+    let (grants, candidates) = if can_admin {
+        let g = collections::grants(&st.pool, user.id(), id).await?;
+        let rows = g
+            .iter()
+            .map(|x| GrantView {
+                id: x.principal_id,
+                label: everyone.iter().find(|a| a.id == x.principal_id).map(label).unwrap_or_else(|| x.name.clone()),
+                level: level_words(t, x.level),
+            })
+            .collect();
+        let cands = everyone
+            .iter()
+            .filter(|a| a.id != c.owner_id && !a.disabled && !g.iter().any(|x| x.principal_id == a.id))
+            .map(|a| (a.id, label(a)))
+            .collect();
+        (rows, cands)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    let s = prefs::settings(&st.pool, user.id()).await?;
+    let tz: chrono_tz::Tz = s.timezone.as_deref().and_then(|z| z.parse().ok()).unwrap_or(st.default_timezone);
+    let when = |t: chrono::DateTime<chrono::Utc>| t.with_timezone(&tz).format("%Y-%m-%d %H:%M").to_string();
+    let sub = if c.subscribed {
+        let x = crate::domain::subscriptions::get(&st.pool, user.id(), id).await?;
+        Some(SubView {
+            host: reqwest::Url::parse(&x.url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default(),
+            last_refresh: x.last_success_at.map(when).unwrap_or_else(|| t.not_yet.to_string()),
+            error: if x.last_error.is_empty() { String::new() } else { i18n::feed_error(user.lang, &x.last_error) },
+            interval: x.interval_minutes,
+            intervals: super::feeds::interval_options(t),
+            can_admin,
+        })
+    } else {
+        None
+    };
+    let links = if can_admin && !c.subscribed {
+        crate::domain::feeds::links(&st.pool, user.id(), id)
+            .await?
+            .into_iter()
+            .map(|l| LinkView {
+                id: l.id,
+                label: l.label,
+                detail: if l.busy { t.detail_busy } else { t.detail_full },
+                created: when(l.created_at),
+                last_used: l.last_used_at.map(when).unwrap_or_else(|| t.not_used_yet.to_string()),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let owner = everyone
+        .iter()
+        .find(|a| a.id == c.owner_id)
+        .map(|a| a.label().to_string())
+        .unwrap_or_else(|| c.owner_name.clone());
+    html(SettingsSheet {
+        t,
+        id,
+        base_name: if c.display_name.is_empty() { c.slug.clone() } else { c.display_name.clone() },
+        my_name: pr.display_name.clone().unwrap_or_default(),
+        color: crate::web::color_input(pr.color.as_deref().or(c.color.as_deref())),
+        alarm_value: pr.default_alarm.map(|m| m.to_string()).unwrap_or_else(|| "none".into()),
+        alarms: alarm_options(t),
+        level: level_words(t, c.access),
+        own: c.owner_id == user.id(),
+        owner,
+        can_admin,
+        grants,
+        candidates,
+        links,
+        sub,
+    })
 }

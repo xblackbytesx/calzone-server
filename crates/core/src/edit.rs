@@ -189,6 +189,30 @@ fn alarm(minutes: i64) -> Component {
     a
 }
 
+/// Replace the reminders on every component of an event (the series and
+/// each moved occurrence) and touch nothing else: no stamps, no SEQUENCE.
+/// Reminders are personal (decision 8), so the shared part of the object
+/// stays byte for byte; this is how someone who can only view a calendar
+/// still sets their own reminders.
+pub fn set_alarms(text: &str, minutes: &[i64]) -> Result<String, EditError> {
+    let mut doc = Document::parse(text).map_err(|_| EditError::NotAnEvent)?;
+    let cal = doc.components.first_mut().filter(|c| c.name == "VCALENDAR").ok_or(EditError::NotAnEvent)?;
+    let mut any = false;
+    for item in cal.items.iter_mut() {
+        if let Item::Component(c) = item
+            && c.name == "VEVENT"
+        {
+            any = true;
+            c.items.retain(|i| !matches!(i, Item::Component(a) if a.name == "VALARM"));
+            c.items.extend(minutes.iter().map(|m| Item::Component(alarm(*m))));
+        }
+    }
+    if !any {
+        return Err(EditError::NotAnEvent);
+    }
+    Ok(doc.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Property helpers on one component.
 
@@ -1240,5 +1264,31 @@ mod tests {
             .updated
             .unwrap();
         assert!(out.contains("DTSTART;VALUE=DATE:20260104"), "{out}");
+    }
+
+    #[test]
+    fn reminders_only_leave_the_shared_part_alone() {
+        let src = weekly("BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT10M\r\nEND:VALARM\r\n");
+        let src = edit(
+            &src,
+            Some("20260112T090000".parse().unwrap()),
+            Scope::This,
+            &EventChange { summary: Some("Moved".into()), ..Default::default() },
+            now(),
+            "x",
+        )
+        .unwrap()
+        .updated
+        .unwrap();
+        let out = set_alarms(&src, &[30]).unwrap();
+        assert_eq!(out.matches("TRIGGER:-PT30M").count(), 2, "series and override");
+        assert!(!out.contains("PT10M"));
+        let shared = |t: &str| {
+            let mut d = Document::parse(t).unwrap();
+            crate::split::split(&mut d);
+            d.to_string()
+        };
+        assert_eq!(shared(&out), shared(&src), "the shared part is byte for byte the same");
+        assert!(set_alarms("BEGIN:VCARD\r\nEND:VCARD\r\n", &[5]).is_err());
     }
 }

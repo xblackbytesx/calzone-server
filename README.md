@@ -11,6 +11,11 @@ Baikal.
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Docker image](https://img.shields.io/badge/ghcr.io-calzone--server-2496ED?logo=docker&logoColor=white)](https://github.com/xblackbytesx/calzone-server/pkgs/container/calzone-server)
 
+- **A calendar and contacts web app**: agenda, day, week and month views
+  with drag to move and resize, quick add ("dentist thu 3pm", also in
+  Dutch), undo after every change, recurring edits for one, following or
+  all occurrences, and a contacts book with search. English and Dutch,
+  dark by default, works on a phone.
 - **People, groups and sharing**: everyone has their own calendars and
   address books and shares them with a person or a group as "can view",
   "can edit" or "can edit and share".
@@ -23,6 +28,11 @@ Baikal.
   calendars, and revocable on its own.
 - **Lossless storage**: events and contacts are kept exactly as clients
   wrote them, every property and parameter, unknown ones included.
+- **ICS feeds both ways**: give a calendar secret subscription links
+  (everything, or busy times only), revocable one by one; subscribe to an
+  outside `.ics` or `webcal://` address, such as school holidays or a
+  Google Calendar, as a read-only calendar that refreshes itself and keeps
+  its last good copy when the source breaks.
 - **Import and export**: copy a whole Baikal account (CalDAV/CardDAV, read
   only), upload `.ics` / `.vcf` files or a Google Takeout zip, download
   everything as one zip. Re-running an import changes nothing; anything
@@ -31,7 +41,7 @@ Baikal.
   (required for admins, or for everyone), Argon2id passphrases, login
   throttling, no third-party scripts, fonts or analytics, a strict CSP.
 
-Coming next: the calendar itself in the web app, ICS feed links, and an
+Coming next: scoped access for assistants and scripts (MCP), and an
 Android app.
 
 ## Deploy

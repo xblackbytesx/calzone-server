@@ -1,49 +1,49 @@
 {% extends "layout.html" %}
-{% block title %}Import &amp; export · CalZone{% endblock %}
+{% block title %}{{ nav.a.import_title }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>Import &amp; export</h1><p class="meta">Bring calendars and contacts in from files or from Baikal, and take a copy of everything out.</p></div></header>
+<header class="page-header"><div><h1>{{ nav.a.import_title }}</h1><p class="meta">{{ nav.a.import_meta }}</p></div></header>
 <div class="panels">
   <section class="panel">
-    <h2>Export</h2>
-    <p>One zip with a calendar file (.ics) for each calendar and a contacts file (.vcf) for each address book, your reminders included. Any calendar app can open them, and CalZone can import them again.</p>
-    <a class="button primary" href="/export.zip" hx-boost="false" download>Download everything</a>
-    <p class="hint">A single calendar or address book can be downloaded from its own page.</p>
+    <h2>{{ nav.a.export }}</h2>
+    <p>{{ nav.a.export_text }}</p>
+    <a class="button primary" href="/export.zip" hx-boost="false" download>{{ nav.a.download_everything }}</a>
+    <p class="hint">{{ nav.a.export_single_hint }}</p>
   </section>
   <section class="panel">
-    <h2>Import a file</h2>
+    <h2>{{ nav.a.import_file }}</h2>
     <form method="post" action="/import/file" enctype="multipart/form-data" class="form">
-      <label class="field">File <span class="hint">.ics (calendar), .vcf (contacts), or the .zip from Google Takeout. Several at once is fine.</span>
+      <label class="field">{{ nav.a.file }} <span class="hint">{{ nav.a.file_hint }}</span>
         <input type="file" name="file" accept=".ics,.vcf,.zip,text/calendar,text/vcard,application/zip" multiple required></label>
-      <label class="field">Put it in
+      <label class="field">{{ nav.a.put_in }}
         <select name="target">
-          <option value="byname" selected>Named after the file</option>
+          <option value="byname" selected>{{ nav.a.named_after_file }}</option>
           {% for t in targets %}<option value="{{ t.id }}">{{ t.label }}</option>{% endfor %}
         </select>
-        <span class="hint">"Named after the file" uses the calendar or address book of that name, and makes it if there is none. Entries that are already there are updated, not doubled, so importing the same file again is safe.</span></label>
-      <button type="submit" class="primary">Import</button>
+        <span class="hint">{{ nav.a.put_in_hint }}</span></label>
+      <button type="submit" class="primary">{{ nav.a.import_btn }}</button>
     </form>
   </section>
   {% if nav.admin %}
   <section class="panel">
-    <h2>Copy from Baikal</h2>
-    <p>Reads every calendar and address book of one Baikal account and copies them into a CalZone account. CalZone only reads; nothing in Baikal changes. Run it again later to pick up changes made in Baikal since.</p>
+    <h2>{{ nav.a.copy_baikal }}</h2>
+    <p>{{ nav.a.baikal_text }}</p>
     <form method="post" action="/import/baikal" class="form">
-      <label class="field">Into the account of
+      <label class="field">{{ nav.a.into_account }}
         <select name="into">{% for p in people %}<option value="{{ p.id }}"{% if p.id == me %} selected{% endif %}>{{ p.label }}</option>{% endfor %}</select>
-        <span class="hint">Reminders go to this person.</span></label>
-      <label class="field">Baikal address <span class="hint">Usually ends in /dav.php/</span><input type="url" name="url" required placeholder="https://baikal.example.org/dav.php/" autocomplete="off"></label>
-      <label class="field">Baikal user name <input type="text" name="user" required autocomplete="off"></label>
-      <label class="field">Baikal password <span class="hint">Used for this copy only, never stored.</span><input type="password" name="password" required autocomplete="off"></label>
-      <button type="submit" class="primary">Copy from Baikal</button>
+        <span class="hint">{{ nav.a.reminders_go_to }}</span></label>
+      <label class="field">{{ nav.a.baikal_address }} <span class="hint">{{ nav.a.baikal_address_hint }}</span><input type="url" name="url" required placeholder="https://baikal.example.org/dav.php/" autocomplete="off"></label>
+      <label class="field">{{ nav.a.baikal_user }} <input type="text" name="user" required autocomplete="off"></label>
+      <label class="field">{{ nav.a.baikal_password }} <span class="hint">{{ nav.a.baikal_password_hint }}</span><input type="password" name="password" required autocomplete="off"></label>
+      <button type="submit" class="primary">{{ nav.a.copy_baikal }}</button>
     </form>
   </section>
   {% endif %}
   <section class="panel">
-    <h2>Recent imports</h2>
-    {% if recent.is_empty() %}<p class="empty">None yet.</p>{% else %}
+    <h2>{{ nav.a.recent_imports }}</h2>
+    {% if recent.is_empty() %}<p class="empty">{{ nav.a.none_yet }}</p>{% else %}
     <ul class="rows">
       {% for r in recent %}
-      <li><div class="row-main"><a class="row-title" href="/import/{{ r.id }}">{{ r.source }}</a><span class="meta">{{ r.status }}: {{ r.totals }}</span><span class="hint">{{ r.when }}, into {{ r.into }}</span></div></li>
+      <li><div class="row-main"><a class="row-title" href="/import/{{ r.id }}">{{ r.source }}</a><span class="meta">{{ r.status }}: {{ r.totals }}</span><span class="hint">{{ r.when }}, {{ nav.a.into }} {{ r.into }}</span></div></li>
       {% endfor %}
     </ul>{% endif %}
   </section>

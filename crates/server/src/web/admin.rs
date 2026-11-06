@@ -10,7 +10,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use super::session::AdminUser;
-use super::{Nav, Page, WebError, base_url, html};
+use super::{Nav, Page, WebError, base_url, html, i18n};
 use crate::AppState;
 use crate::domain::accounts::{self, Account};
 use crate::domain::principals;
@@ -77,7 +77,7 @@ pub async fn create_user(
 async fn issued(st: &AppState, user: &super::session::WebUser, headers: &HeaderMap, id: Uuid) -> Page {
     let account = accounts::get(&st.pool, id).await?;
     if account.is_group() {
-        return Err(WebError::bad("Groups do not sign in."));
+        return Err(WebError::bad(i18n::a(user.lang).err_groups_no_signin));
     }
     let passphrase = accounts::issue_temporary(&st.pool, id).await?;
     html(IssuedPage {
@@ -96,7 +96,7 @@ pub async fn reset_passphrase(
     Path(id): Path<Uuid>,
 ) -> Page {
     if id == user.id() {
-        return Err(WebError::bad("Change your own passphrase in Settings."));
+        return Err(WebError::bad(i18n::a(user.lang).err_own_passphrase));
     }
     issued(&st, &user, &headers, id).await
 }
@@ -104,7 +104,7 @@ pub async fn reset_passphrase(
 fn not_yourself(user: &super::session::WebUser, id: Uuid) -> Result<(), WebError> {
     if id == user.id() {
         // So the last admin cannot lock everyone out by accident.
-        return Err(WebError::new(StatusCode::BAD_REQUEST, "You can't do that to your own account."));
+        return Err(WebError::new(StatusCode::BAD_REQUEST, i18n::a(user.lang).err_not_yourself));
     }
     Ok(())
 }
@@ -167,14 +167,14 @@ pub struct MemberForm {
 
 pub async fn add_member(
     State(st): State<AppState>,
-    AdminUser(_): AdminUser,
+    AdminUser(user): AdminUser,
     Path(id): Path<Uuid>,
     Form(f): Form<MemberForm>,
 ) -> Page {
     // Members are users; a group inside a group would not pass access on.
     let (group, member) = (accounts::get(&st.pool, id).await?, accounts::get(&st.pool, f.member).await?);
     if !group.is_group() || member.is_group() {
-        return Err(WebError::bad("Add people to groups."));
+        return Err(WebError::bad(i18n::a(user.lang).err_add_people));
     }
     principals::add_member(&st.pool, id, f.member).await?;
     Ok(Redirect::to("/admin/people").into_response())

@@ -80,15 +80,34 @@ pub(super) struct Locked {
 /// so writes to one collection are serialised and each takes its sequence
 /// number inside the lock.
 pub(super) async fn lock(tx: &mut Transaction<'_, Postgres>, actor: Actor, collection: Uuid) -> Result<Locked> {
+    let row: Option<(String, Vec<String>, i64, bool)> = sqlx::query_as(
+        "SELECT kind, components, sequence, EXISTS (SELECT 1 FROM subscriptions s WHERE s.collection_id = c.id)
+         FROM collections c WHERE id = $1 FOR UPDATE",
+    )
+    .bind(collection)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let (kind, components, sequence, subscribed) = row.ok_or(DomainError::NotFound)?;
+    let mut access = access::of(&mut **tx, actor, collection).await?.ok_or(DomainError::NotFound)?;
+    if subscribed {
+        // Filled from outside: nobody edits it (their own reminders aside,
+        // which only need read access).
+        access = Access::Read;
+    }
+    let kind = if kind == "addressbook" { CollectionKind::AddressBook } else { CollectionKind::Calendar };
+    Ok(Locked { kind, components, sequence, access })
+}
+
+/// The refresher's lock on a subscribed calendar: no actor, full access.
+pub(super) async fn lock_for_refresh(tx: &mut Transaction<'_, Postgres>, collection: Uuid) -> Result<Locked> {
     let row: Option<(String, Vec<String>, i64)> =
         sqlx::query_as("SELECT kind, components, sequence FROM collections WHERE id = $1 FOR UPDATE")
             .bind(collection)
             .fetch_optional(&mut **tx)
             .await?;
     let (kind, components, sequence) = row.ok_or(DomainError::NotFound)?;
-    let access = access::of(&mut **tx, actor, collection).await?.ok_or(DomainError::NotFound)?;
     let kind = if kind == "addressbook" { CollectionKind::AddressBook } else { CollectionKind::Calendar };
-    Ok(Locked { kind, components, sequence, access })
+    Ok(Locked { kind, components, sequence, access: Access::Owner })
 }
 
 async fn readable(pool: &PgPool, actor: Actor, collection: Uuid) -> Result<Access> {
@@ -97,9 +116,9 @@ async fn readable(pool: &PgPool, actor: Actor, collection: Uuid) -> Result<Acces
 
 /// What a body becomes before it is stored.
 pub(super) struct Prepared {
-    uid: String,
+    pub(super) uid: String,
     kind: &'static str,
-    shared: String,
+    pub(super) shared: String,
     layer: Option<UserLayer>,
     undated: bool,
     starts_at: Option<NaiveDateTime>,
@@ -107,6 +126,14 @@ pub(super) struct Prepared {
     recurring: bool,
     summary: Option<String>,
     emails: Vec<String>,
+}
+
+impl Prepared {
+    /// The shared part only: storing it leaves every person's layer as it
+    /// is (a feed's alarms are its publisher's, never ours).
+    pub(super) fn without_layer(self) -> Prepared {
+        Prepared { layer: None, ..self }
+    }
 }
 
 pub(super) fn prepare(kind: CollectionKind, components: &[String], body: &str) -> Result<Prepared> {

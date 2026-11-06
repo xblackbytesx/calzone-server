@@ -8,6 +8,7 @@ pub mod config;
 pub mod dav;
 pub mod domain;
 pub mod export;
+pub mod feeds;
 pub mod import;
 pub mod throttle;
 pub mod web;
@@ -44,6 +45,8 @@ pub struct AppState {
     pub two_factor: config::TwoFactorPolicy,
     /// `CALZONE_DEFAULT_TIMEZONE`.
     pub default_timezone: chrono_tz::Tz,
+    /// `CALZONE_FEEDS_ALLOW_PRIVATE`.
+    pub feeds_allow_private: bool,
 }
 
 impl AppState {
@@ -58,12 +61,13 @@ impl AppState {
             secret_key: None,
             two_factor: config::TwoFactorPolicy::Admins,
             default_timezone: chrono_tz::UTC,
+            feeds_allow_private: false,
         }
     }
 }
 
 pub fn router(state: AppState) -> Router {
-    let mut app = Router::new().route("/healthz", get(healthz)).merge(web::routes(state.dav));
+    let mut app = Router::new().route("/healthz", get(healthz)).merge(web::routes(&state));
     if state.dav {
         app = app.merge(dav::routes());
     }

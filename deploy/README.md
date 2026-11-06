@@ -28,6 +28,7 @@ backups) and `CALZONE_PUBLIC_URL`.
 | `CALZONE_SECRET_KEY` | required; encrypts two-factor secrets. Lost: everyone sets two-factor up again |
 | `CALZONE_TWO_FACTOR` | who must use two-factor sign-in: `everyone`, `admins` (default) or `optional` |
 | `CALZONE_DEFAULT_TIMEZONE` | IANA zone for people who have not set theirs (default `UTC`) |
+| `CALZONE_FEEDS_ALLOW_PRIVATE` | `off` (default): calendar subscriptions never fetch private, loopback or link-local addresses. `on` only to subscribe to a feed inside your own network |
 
 Create the database directory, owned by Postgres's container user:
 
@@ -108,6 +109,18 @@ could not be stored can be downloaded as they arrived. From the shell:
 cz import baikal anna https://baikal.example.org/dav.php/ anna   # password on stdin or BAIKAL_PASSWORD
 cz import file anna /path/family.ics
 cz export anna /path/anna.zip
+```
+
+## Calendar feeds
+
+A calendar's settings (the "⋯" in the calendar list) make secret
+subscription links, full or busy-only, served at `/feeds/<token>.ics`
+with or without the DAV door. "+ Subscribe to a calendar" adds an outside
+`.ics` or `webcal://` address as a read-only calendar. The server fetches
+it itself, so it needs outgoing HTTPS. Check a link from outside:
+
+```
+curl -sI https://calzone.example.org/feeds/<token>.ics   # 200, text/calendar
 ```
 
 ## Backups and upgrades
