@@ -1,6 +1,7 @@
 //! CalZone server library: the router and stores, split from `main` so
 //! integration tests drive the real app.
 
+pub mod audit;
 pub mod cli;
 pub mod client;
 pub mod config;

@@ -85,6 +85,8 @@ A lost phone with no recovery codes: "Reset two-factor" on People, or
 Discovery uses `/.well-known/caldav` and `/.well-known/carddav`. Ten
 failed logins from one address within 15 minutes lock that address out for
 the rest of the window (`429`); the web login also allows five per account.
+Each refused sign-in logs one `auth_failure` line; [crowdsec/](crowdsec/)
+turns those into bans at the proxy.
 
 ```
 curl -si https://calzone.privacy.box/.well-known/caldav | head -3

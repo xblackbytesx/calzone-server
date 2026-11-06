@@ -16,6 +16,7 @@ use super::pages::{PER_ACCOUNT, PER_ADDRESS};
 use super::session::{self, PendingUser, SignedIn, WebUser};
 use super::{Nav, Page, WebError, html};
 use crate::AppState;
+use crate::audit::{self, Reason, Service};
 use crate::client::ClientAddr;
 use crate::domain::accounts;
 use crate::domain::two_factor::{self, Accepted, SecretKey};
@@ -66,6 +67,7 @@ pub async fn code(
     let (addr_key, acct_key) = (addr.key("web"), budget_key(user.id()));
     if st.throttle.blocked(&addr_key, PER_ADDRESS, t) || st.throttle.blocked(&acct_key, PER_ACCOUNT, t) {
         // Too many tries: this pending session is spent; start over later.
+        audit::auth_failure(Service::Code, Reason::Throttled, addr.0);
         accounts::end_session(&st.pool, &user.token).await?;
         return again("Too many wrong codes. Wait 15 minutes and log in again.", StatusCode::TOO_MANY_REQUESTS);
     }
@@ -82,7 +84,7 @@ pub async fn code(
         None => {
             st.throttle.fail(&addr_key, t);
             st.throttle.fail(&acct_key, t);
-            tracing::info!(ip = ?addr.0, "web: wrong two-factor code");
+            audit::auth_failure(Service::Code, Reason::Wrong, addr.0);
             again("That code is not right, or was already used. Try the next one.", StatusCode::UNAUTHORIZED)
         }
     }

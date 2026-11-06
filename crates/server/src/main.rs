@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::net::SocketAddr;
 
 use anyhow::Result;
@@ -9,6 +10,9 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
+        // Colour codes only on a terminal: in a container they would land in
+        // the log and break parsers (CrowdSec reads these lines, decision 34).
+        .with_ansi(std::io::stdout().is_terminal())
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
     let cfg = Config::from_env()?;

@@ -7,6 +7,7 @@ use axum::response::{IntoResponse, Response};
 use base64::Engine;
 
 use crate::AppState;
+use crate::audit::{self, Reason, Service};
 use crate::client::ClientAddr;
 use crate::domain::app_passwords::{self, Login};
 use crate::throttle::WINDOW;
@@ -38,6 +39,7 @@ pub async fn authenticate(st: &AppState, addr: &ClientAddr, headers: &HeaderMap)
     let now = Instant::now();
     let key = addr.key("dav");
     if st.throttle.blocked(&key, MAX_FAILURES, now) {
+        audit::auth_failure(Service::Dav, Reason::Throttled, addr.0);
         let retry = [(header::RETRY_AFTER, WINDOW.as_secs().to_string())];
         return Err((StatusCode::TOO_MANY_REQUESTS, retry).into_response());
     }
@@ -47,7 +49,7 @@ pub async fn authenticate(st: &AppState, addr: &ClientAddr, headers: &HeaderMap)
         Ok(Some(login)) => Ok(login),
         Ok(None) => {
             st.throttle.fail(&key, now);
-            tracing::info!(ip = ?addr.0, "dav: failed login");
+            audit::auth_failure(Service::Dav, Reason::Wrong, addr.0);
             Err(unauthorized())
         }
         Err(e) => {

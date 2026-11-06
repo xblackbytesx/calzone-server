@@ -13,6 +13,7 @@ use serde::Deserialize;
 use super::session::{self, SessionToken, SignedIn, WebUser};
 use super::{Nav, Page, WebError, html};
 use crate::AppState;
+use crate::audit::{self, Reason, Service};
 use crate::client::ClientAddr;
 use crate::domain::accounts::{self, MIN_PASSPHRASE};
 use crate::domain::two_factor;
@@ -63,6 +64,7 @@ pub async fn login(State(st): State<AppState>, addr: ClientAddr, Form(f): Form<L
     let (addr_key, acct_key) = (addr.key("web"), account_key(&f.name));
     // Checked before Argon2 runs, so a blocked guesser costs no CPU.
     if st.throttle.blocked(&addr_key, PER_ADDRESS, now) || st.throttle.blocked(&acct_key, PER_ACCOUNT, now) {
+        audit::auth_failure(Service::Web, Reason::Throttled, addr.0);
         return again("Too many failed attempts. Wait 15 minutes and try again.", StatusCode::TOO_MANY_REQUESTS);
     }
     match accounts::check_login(&st.pool, &f.name, &f.passphrase).await? {
@@ -88,7 +90,7 @@ pub async fn login(State(st): State<AppState>, addr: ClientAddr, Form(f): Form<L
         None => {
             st.throttle.fail(&addr_key, now);
             st.throttle.fail(&acct_key, now);
-            tracing::info!(ip = ?addr.0, "web: failed login");
+            audit::auth_failure(Service::Web, Reason::Wrong, addr.0);
             // The same answer for an unknown name, a disabled account, no
             // passphrase yet and a wrong passphrase.
             again("Wrong name or passphrase.", StatusCode::UNAUTHORIZED)

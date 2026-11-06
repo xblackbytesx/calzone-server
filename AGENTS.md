@@ -80,8 +80,9 @@ real Baikal copy run twice, a week of use, and the restore drill.
 2026-11-06, going public: CI and releases moved to GitHub (decision 22
 revised), and the web login got two-factor sign-in (decision 32,
 migration `0006_two_factor.sql`, `CALZONE_SECRET_KEY` now required), and
-"Keep me signed in" (decision 33, migration `0007_session_length.sql`).
-133 workspace tests.
+"Keep me signed in" (decision 33, migration `0007_session_length.sql`),
+and one `auth_failure` log line per refused sign-in with a CrowdSec parser
+and scenario in `deploy/crowdsec/` (decision 34). 134 workspace tests.
 
 ## Architecture
 
@@ -108,7 +109,7 @@ two repos.
 | `crates/ffi` (`calzone-ffi`) | UniFFI bindings for the app | Thin: JSON in and out (the core's own shapes), `flat_error` for real errors |
 
 Server modules: `config`, `cli` (admin commands), `client` (client
-address), `throttle` (login failure budgets), `domain` (`access`,
+address), `audit` (the `auth_failure` line), `throttle` (login failure budgets), `domain` (`access`,
 `principals`, `collections`, `objects`: put, get, get_many, list, in_range,
 delete, changes_since; `app_passwords`: create, list, revoke, verify;
 `accounts`: passphrases, admins, sessions; `imports`: reports;
@@ -569,6 +570,18 @@ Settled 2026-11-06:
     on the session (`web_sessions.persistent`): a pending two-factor
     session hands it to the session that follows, and a passphrase change
     keeps it.
+34. **Refused sign-ins are logged for CrowdSec (2026-11-06).** One fixed
+    line per refusal (`server::audit`): `auth_failure service=web|code|dav
+    reason=wrong|throttled ip=<address>`, target `calzone::auth`, level
+    WARN. Throttled refusals are logged too, so a guesser that keeps going
+    past CalZone's own budget still fills CrowdSec's bucket. Never the name
+    tried (people type passphrases into it) or any credential. The address
+    is the throttling one (`CALZONE_BEHIND_PROXY`). Logs carry no colour
+    codes unless stdout is a terminal. `deploy/crowdsec/` holds the
+    acquisition, a parser for exactly this line (pinned by
+    `audit::tests`) and a scenario: more than 10 refusals in about 10
+    minutes from one address. The line format is a contract: change the
+    parser with it.
 26. **S2, grid component (open):** vkurko EventCalendar or our own Web
     Component. Licence confirmed from the repo's LICENSE file before
     adoption.

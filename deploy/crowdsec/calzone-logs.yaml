@@ -1,0 +1,21 @@
+# CrowdSec parser (stage s01-parse) for CalZone's refused sign-ins
+# (decision 34). One line per refused attempt, for example:
+#   2026-11-06T09:39:38.293654Z  WARN calzone::auth: auth_failure service=web reason=wrong ip=203.0.113.7
+# service: web (passphrase), code (two-factor), dav (device password)
+# reason: wrong, or throttled (refused unchecked, over CalZone's own budget)
+onsuccess: next_stage
+filter: "evt.Parsed.program == 'calzone'"
+name: calzone/calzone-logs
+description: "Parse CalZone refused sign-ins"
+grok:
+  pattern: '^%{TIMESTAMP_ISO8601:timestamp}\s+WARN calzone::auth: auth_failure service=%{WORD:service} reason=%{WORD:reason} ip=%{IP:source_ip}$'
+  apply_on: message
+statics:
+  - meta: log_type
+    value: calzone_failed_auth
+  - meta: service
+    expression: "evt.Parsed.service"
+  - meta: source_ip
+    expression: "evt.Parsed.source_ip"
+  - target: evt.StrTime
+    expression: "evt.Parsed.timestamp"

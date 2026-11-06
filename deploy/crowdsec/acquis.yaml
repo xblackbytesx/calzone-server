@@ -1,0 +1,7 @@
+# CrowdSec acquisition: read CalZone's container log. Add this to your
+# CrowdSec acquisition (for example /etc/crowdsec/acquis.d/calzone.yaml).
+source: docker
+container_name:
+  - calzone-server-app
+labels:
+  type: calzone

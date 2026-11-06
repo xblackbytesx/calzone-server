@@ -1,0 +1,17 @@
+# CrowdSec scenario: more than 10 refused CalZone sign-ins from one address
+# within about 10 minutes (one leaks out per minute). CalZone's own budget
+# stops checking after 10 failures per 15 minutes; the refusals after that
+# are still logged (reason=throttled), so a guesser that keeps going fills
+# this bucket and gets banned at the proxy.
+type: leaky
+name: calzone/calzone-bf
+description: "Detect brute force against CalZone sign-in (web, two-factor, devices)"
+filter: "evt.Meta.log_type == 'calzone_failed_auth'"
+groupby: evt.Meta.source_ip
+leakspeed: 1m
+capacity: 10
+blackhole: 5m
+labels:
+  service: calzone
+  type: bruteforce
+  remediation: true
