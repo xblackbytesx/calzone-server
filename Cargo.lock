@@ -334,7 +334,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "calcard",
  "chrono",
@@ -347,7 +347,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-dav"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "calzone-core",
  "chrono",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
