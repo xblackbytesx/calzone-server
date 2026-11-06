@@ -283,6 +283,25 @@ Verified:
   a list of everyday tasks without help, and whatever trips them up gets
   fixed. Then the phase is done.
 
+**Accessibility pass done 2026-11-06** (decision 42); the household test
+is open.
+
+Found while building:
+- White text on mid-tone event colours (3.4:1): the black-or-white choice
+  used a fixed brightness cut-off instead of comparing contrast.
+- EventCalendar's table roles held navigation and buttons, and every
+  event was announced by its title alone.
+- Short events stacked time over title and spilled out of their block;
+  events showed "BD" for "Bram de Vries" (first two words) while the list
+  showed "BV".
+
+Verified:
+- axe-core finds nothing over every page, view, panel and sheet at phone
+  and desk width, light and dark, English and Dutch; no console, CSP or
+  overflow problems; a keyboard walk (skip link, toolbar, list, events,
+  Enter opens, Esc closes and returns focus). Step 3's calendar flow re-run
+  unchanged. 185 workspace tests.
+
 ## Exit criteria
 
 1. The automated suites pass, including edit round trips over the

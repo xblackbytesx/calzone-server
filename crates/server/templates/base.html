@@ -17,7 +17,7 @@
 </head>
 <body hx-boost="true">
 {% block nav %}{% endblock %}
-<main class="page {% block main_class %}{% endblock %}">
+<main id="main" tabindex="-1" class="page {% block main_class %}{% endblock %}">
 <div id="flash" aria-live="polite"></div>
 {% block content %}{% endblock %}
 </main>

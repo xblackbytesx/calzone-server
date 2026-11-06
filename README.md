@@ -11,6 +11,35 @@ Baikal.
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Docker image](https://img.shields.io/badge/ghcr.io-calzone--server-2496ED?logo=docker&logoColor=white)](https://github.com/xblackbytesx/calzone-server/pkgs/container/calzone-server)
 
+![The week view: calendars beside the grid, each in its own colour, with initials on events from someone else's calendar](docs/screenshots/week-dark.png)
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/month-light.png" alt="Month view in the light theme"></td>
+    <td><img src="docs/screenshots/event-dark.png" alt="The event panel: title, times, repeat, place, notes and your own reminders"></td>
+  </tr>
+  <tr>
+    <td align="center">Month view, light theme</td>
+    <td align="center">Editing an event</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/feeds-dark.png" alt="Calendar settings with a new busy-only subscription link and its copy buttons"></td>
+    <td><img src="docs/screenshots/contacts-dark.png" alt="The contacts list with search and letter groups"></td>
+  </tr>
+  <tr>
+    <td align="center">Secret subscription links</td>
+    <td align="center">Contacts</td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/phone-agenda-dark.png" width="260" alt="The agenda on a phone">
+  &nbsp;
+  <img src="docs/screenshots/phone-day-dark.png" width="260" alt="The day view on a phone">
+</p>
+
+<sub>Screenshots show a made-up household.</sub>
+
 - **A calendar and contacts web app**: agenda, day, week and month views
   with drag to move and resize, quick add ("dentist thu 3pm", also in
   Dutch), undo after every change, recurring edits for one, following or
@@ -37,6 +66,9 @@ Baikal.
   only), upload `.ics` / `.vcf` files or a Google Takeout zip, download
   everything as one zip. Re-running an import changes nothing; anything
   that cannot be stored is kept, never dropped.
+- **Accessible**: every page passes an automated WCAG 2.1 AA check in
+  light and dark, on a phone and a desk; works by keyboard, and screen
+  readers hear each event as title, day, time, place and calendar.
 - **Safe to put online**: two-factor sign-in with any authenticator app
   (required for admins, or for everyone), Argon2id passphrases, login
   throttling, no third-party scripts, fonts or analytics, a strict CSP.

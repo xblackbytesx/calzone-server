@@ -59,19 +59,24 @@
     }, function () { return { ok: false, status: 0, data: null }; });
   }
 
-  /** Black or white text on an event colour, by its luminance. */
+  /** Black or white text on an event colour: whichever contrasts more
+      (WCAG ratios), so mid tones get dark text. */
   function textOn(hex) {
     var m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
     if (!m) return "#ffffff";
     var n = parseInt(m[1], 16);
     var lin = function (c) { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
     var L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-    return L > 0.4 ? "#111111" : "#ffffff";
+    // Pure black and white: with them every colour reaches 4.5:1 (the worst
+    // case is about 4.58), with near-black some cannot.
+    var onWhite = 1.05 / (L + 0.05), onBlack = (L + 0.05) / 0.05;
+    return onBlack >= onWhite ? "#000000" : "#ffffff";
   }
 
   function initials(name) {
     var parts = String(name || "?").replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/);
-    var s = parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] || "?").slice(0, 2);
+    // First and last word, as the server does ("Bram de Vries" is BV).
+    var s = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] || "?").slice(0, 2);
     return s.toUpperCase();
   }
 
@@ -80,11 +85,15 @@
   var toastTimer = null;
   var undoId = null;
   function toast(msg, changeId) {
-    toastEl.querySelector(".cal-toast-text").textContent = msg;
     var btn = toastEl.querySelector("[data-cal=undo]");
     undoId = changeId || null;
     btn.hidden = !undoId;
+    // Shown first, filled a moment later: screen readers announce a change
+    // inside a visible live region, not a region that just appeared.
+    var text = toastEl.querySelector(".cal-toast-text");
+    text.textContent = "";
     toastEl.hidden = false;
+    setTimeout(function () { text.textContent = msg; }, 50);
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.hidden = true; undoId = null; }, undoId ? 10000 : 5000);
   }
@@ -141,16 +150,20 @@
   function eventContent(info) {
     var p = info.event.extendedProps;
     var nodes = [];
-    if (info.timeText && !info.event.allDay) {
+    // In the time grid the block's place already shows the time, so the
+    // title comes first, and a phone's narrow week columns skip the time.
+    var grid = info.view.type.indexOf("timeGrid") === 0;
+    var title = document.createElement("span");
+    title.className = "cal-ev-title";
+    title.textContent = p.title || "";
+    if (grid) nodes.push(title);
+    if (info.timeText && !info.event.allDay && !(grid && isPhone() && info.view.type === "timeGridWeek")) {
       var time = document.createElement("span");
       time.className = "cal-ev-time";
       time.textContent = info.timeText;
       nodes.push(time);
     }
-    var title = document.createElement("span");
-    title.className = "cal-ev-title";
-    title.textContent = p.title || "";
-    nodes.push(title);
+    if (!grid) nodes.push(title);
     if (!p.own) {
       var who = document.createElement("span");
       who.className = "cal-ev-who";
@@ -159,6 +172,36 @@
       nodes.push(who);
     }
     return { domNodes: nodes };
+  }
+
+  /** What a screen reader says for an event: title, when, calendar, and
+      whose (the grid's visual cues spelled out). */
+  var dayWords = new Intl.DateTimeFormat(C.locale, { weekday: "long", day: "numeric", month: "long" });
+  function eventLabel(info) {
+    var p = info.event.extendedProps;
+    var parts = [p.title || ""];
+    var when = dayWords.format(info.event.start);
+    parts.push(info.event.allDay ? when + ", " + T.all_day : when + ", " + (info.timeText || ""));
+    if (p.location) parts.push(p.location);
+    parts.push(p.calendar);
+    if (!p.own) parts.push(T.from_owner + " " + p.owner);
+    return parts.filter(Boolean).join(", ");
+  }
+
+  /** EventCalendar marks its layout up as a table but puts navigation and
+      event buttons straight into rows, which screen readers stumble over.
+      The grid is a visual layout; the agenda view is the list. So the table
+      roles go, and every event button carries a full label instead. */
+  var LAYOUT_ROLES = { table: 1, row: 1, rowgroup: 1, columnheader: 1, cell: 1, gridcell: 1, grid: 1, list: 1, listitem: 1 };
+  var LAYOUT_ATTRS = ["aria-colindex", "aria-rowindex", "aria-colcount", "aria-rowcount"];
+  function strip(e) {
+    if (e.hasAttribute("role") && LAYOUT_ROLES[e.getAttribute("role")]) e.removeAttribute("role");
+    for (var j = 0; j < LAYOUT_ATTRS.length; j++) if (e.hasAttribute(LAYOUT_ATTRS[j])) e.removeAttribute(LAYOUT_ATTRS[j]);
+  }
+  function stripLayoutRoles(el) {
+    strip(el);
+    var all = el.querySelectorAll("[role], [aria-colindex], [aria-rowindex], [aria-colcount], [aria-rowcount]");
+    for (var i = 0; i < all.length; i++) strip(all[i]);
   }
 
   var params = new URLSearchParams(location.search);
@@ -196,6 +239,16 @@
       }
     }],
     eventContent: eventContent,
+    eventDidMount: function (info) {
+      info.el.setAttribute("aria-label", eventLabel(info));
+      // Short events get one line with an ellipsis instead of a clipped wrap.
+      var ev = info.event;
+      if (!ev.allDay && ev.end) {
+        var minutes = (ev.end - ev.start) / 60000;
+        if (minutes < 40) info.el.classList.add("cal-ev-short");
+        if (minutes <= 20) info.el.classList.add("cal-ev-tiny");
+      }
+    },
     eventClick: function (info) { openEvent(info.event.extendedProps); },
     dateClick: function (info) {
       if (!C.calendars.length) return;
@@ -214,6 +267,11 @@
   });
 
   function refresh() { cal.refetchEvents(); }
+
+  var ecRoot = grid.querySelector(".ec") || grid;
+  stripLayoutRoles(ecRoot);
+  new MutationObserver(function () { stripLayoutRoles(ecRoot); })
+    .observe(grid, { subtree: true, childList: true, attributes: true, attributeFilter: ["role"].concat(LAYOUT_ATTRS) });
 
   function afterNavigate() {
     var v = cal.getView();

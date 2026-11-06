@@ -99,7 +99,10 @@ workspace tests. Step 5 done the same day: reminders on view-only
 calendars, the calendar list with sharing, preferences, every page in
 Dutch and English, phone navigation (decision 40). 175 workspace tests.
 Step 6 done the same day: ICS feeds both ways (decision 41), migration
-`0009_feeds.sql`. 185 workspace tests.
+`0009_feeds.sql`. 185 workspace tests. Step 7 under way: the
+accessibility and layout pass is done (decision 42; axe-core finds
+nothing on any page), README screenshots from a made-up household; the
+household test (decision 12) is the owner's and still open.
 
 ## Architecture
 
@@ -822,6 +825,33 @@ Settled 2026-11-06:
       `last_error`), translated when shown. A failed refresh answers 422,
       not 502, so the access log does not report an outside feed's
       trouble as a server error.
+
+42. **Accessibility and polish (phase 2 step 7, 2026-11-06).**
+    - **The check:** axe-core (WCAG 2.0/2.1 A and AA) over every page,
+      the four calendar views, both panels and both sheets, at phone and
+      desk width, light and dark, English and Dutch, against the real
+      binary with a made-up household; plus console, CSP and overflow
+      checks and a keyboard walk. Result: no findings. Rerun it after UI
+      changes; the household's real data never goes into screenshots.
+    - **Event colours:** text on an event is pure black or white,
+      whichever contrasts more with the calendar colour. With pure black
+      and white every colour reaches 4.5:1 (the worst case is about 4.58);
+      with near-black some cannot. The time is not faded, and the owner's
+      initials are a ring, not a tinted fill.
+    - **The grid for screen readers:** EventCalendar labels its layout as
+      a table but puts navigation and event buttons straight into rows.
+      `calendar.js` removes those layout roles and index attributes (a
+      MutationObserver keeps them off) and gives every event an
+      `aria-label`: title, day, time or "all day", place, calendar and
+      whose. The agenda view is the list view.
+    - **Short events** (under 40 minutes) are one line with an ellipsis;
+      in the time grid the title comes first (the block's place already
+      shows the time), and a phone's week view leaves the time out.
+      Initials are first and last word everywhere ("Bram de Vries" is BV).
+    - **Elsewhere:** links inside sentences are underlined (WCAG 1.4.1);
+      a "Skip to content" link; toasts are filled after they appear so
+      screen readers announce them; the light theme's green is darker
+      (`#176a3f`) for 4.5:1 on its tint.
 
 ## Roadmap
 

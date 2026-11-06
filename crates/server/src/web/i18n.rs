@@ -102,6 +102,7 @@ pub struct T {
     pub all_day: &'static str,
     pub no_events: &'static str,
     pub shortcuts: &'static str,
+    pub skip_to_content: &'static str,
     pub no_calendar: &'static str,
     // The event panel.
     pub title: &'static str,
@@ -293,6 +294,7 @@ pub static EN: T = T {
     all_day: "All day",
     no_events: "Nothing planned.",
     shortcuts: "Keys: t today, n new, arrows or j/k to move, 1-4 for the views, Esc to close.",
+    skip_to_content: "Skip to content",
     no_calendar: "Make a calendar first, under Calendars & address books.",
     title: "Title",
     starts: "Starts",
@@ -480,6 +482,7 @@ pub static NL: T = T {
     all_day: "Hele dag",
     no_events: "Niets gepland.",
     shortcuts: "Toetsen: t vandaag, n nieuw, pijltjes of j/k om te bladeren, 1-4 voor de weergaven, Esc om te sluiten.",
+    skip_to_content: "Naar de inhoud",
     no_calendar: "Maak eerst een agenda aan, onder Agenda's & adresboeken.",
     title: "Titel",
     starts: "Begint",

@@ -43,7 +43,7 @@
     --line: light-dark(#e2ded5, #33333c);
     --accent: light-dark(#0f766e, #5fd0c4);
     --on-accent: light-dark(#ffffff, #0e1513);
-    --good: light-dark(#1d7a4a, #6fd8a3);
+    --good: light-dark(#176a3f, #6fd8a3);
     --caution: light-dark(#8a5a00, #f2c063);
     --danger: light-dark(#b3261e, #ff8a80);
     /* Tints for backgrounds, derived rather than picked. */
@@ -99,7 +99,13 @@
   p { max-inline-size: var(--measure); }
   a { color: var(--accent); text-underline-offset: 0.15em; }
   a:not(:hover) { text-decoration: none; }
+  /* A link inside a sentence must not rely on colour alone (WCAG 1.4.1). */
+  :where(p, .hint, .notice, td) a:not(.button) { text-decoration: underline; }
   :focus-visible { outline: var(--focus); outline-offset: 2px; }
+  /* Off screen until a keyboard reaches it. */
+  .skip-link { position: absolute; inset-block-start: var(--space-2xs); inset-inline-start: var(--space-2xs); z-index: 100; padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-m); background: var(--surface); color: var(--text); transform: translateY(-200%); }
+  .skip-link:focus-visible { transform: none; }
+  main:focus { outline: none; }
   code { font: 0.9em var(--font-mono); overflow-wrap: anywhere; }
   pre { font: var(--step--1) / 1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
   time { white-space: nowrap; }
@@ -487,12 +493,14 @@
   }
 
   /* What an event shows: time, title, and initials when someone else owns it. */
-  .cal-ev-time { font-size: 0.85em; opacity: 0.85; margin-inline-end: 0.3em; }
+  .cal-ev-time { font-size: 0.85em; margin-inline-end: 0.3em; }
+  .cal-ev-title + .cal-ev-time { margin-inline: 0.3em 0; }
   .cal-ev-title { font-weight: 600; }
   .cal-ev-who {
-    display: inline-grid; place-items: center; align-self: flex-start; justify-self: start; margin-inline-start: 0.35em; padding-inline: 0.3em;
-    min-inline-size: 1.5em; block-size: 1.5em; border-radius: 999px; font-size: 0.75em; font-weight: 700;
-    background: color-mix(in oklab, currentColor 22%, transparent);
+    display: inline-grid; place-items: center; vertical-align: 0.1em; margin-inline-start: 0.35em; padding-inline: 0.3em;
+    min-inline-size: 1.6em; block-size: 1.6em; line-height: 1; border-radius: 999px; font-size: 0.75em; font-weight: 700;
+    /* A ring, not a tint: a tinted fill lowers the initials' contrast. */
+    box-shadow: inset 0 0 0 1.5px currentColor;
   }
 
   /* The event panel: a sheet at the side, full screen on a phone. */
@@ -562,7 +570,13 @@
   border-radius: var(--radius-m);
   font-size: var(--step--1);
 }
-.cal .ec .ec-event { border-radius: var(--radius-s); cursor: pointer; }
+.cal .ec .ec-event { border-radius: var(--radius-s); cursor: pointer; overflow: hidden; }
+/* Time, title and initials flow as one line that wraps, so a short event
+   shows "08:00-08:30 School run" instead of a title spilling out below. */
+.cal .ec .ec-event-body { display: block; overflow: hidden; line-height: 1.25; }
+.cal .ec.ec-time-grid .ec-event.cal-ev-short { padding-block: 0; }
+.cal .ec.ec-time-grid .cal-ev-short .ec-event-body { white-space: nowrap; text-overflow: ellipsis; }
+.cal .ec.ec-time-grid .cal-ev-tiny .ec-event-body { font-size: 0.8em; line-height: 1; }
 /* Its own built-in shades switch on a polyfill pair; set it from our theme. */
 :root[data-theme="dark"] .cal .ec { --lightningcss-light: ; --lightningcss-dark: initial; }
 :root[data-theme="light"] .cal .ec { --lightningcss-light: initial; --lightningcss-dark: ; }
