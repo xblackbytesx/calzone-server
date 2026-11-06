@@ -1,0 +1,388 @@
+/* CalZone web app. One stylesheet, mobile first, no inline styles (the CSP
+   forbids them). Four layers, lowest first: a reset, the design tokens,
+   element defaults, then the components. Classes name what a thing is
+   (panel, rows, swatch), never how it looks. The reset, tokens and base
+   layers are the same as WordWarZ's and Converge's (decision 13); the
+   components start from Converge's.
+
+   Units: rem for type, space and tap sizes, so browser zoom and the phone's
+   text size scale everything together; em where a size should follow its
+   own text (badges, icons); px only for hairlines. Fluid steps keep a rem
+   term, so they still grow with zoom. Logical properties throughout. */
+
+@layer reset, tokens, base, components;
+
+/* ---- Reset ------------------------------------------------------------- */
+
+@layer reset {
+  *, *::before, *::after { box-sizing: border-box; }
+  * { margin: 0; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  img, svg { display: block; max-inline-size: 100%; }
+  input, button, select, textarea { font: inherit; color: inherit; }
+  p, h1, h2, h3, li { overflow-wrap: break-word; }
+  [hidden] { display: none !important; }
+}
+
+/* ---- Tokens ------------------------------------------------------------ */
+
+@layer tokens {
+  :root {
+    color-scheme: light dark;
+
+    /* Colour roles. light-dark() keeps both themes in one place. */
+    --canvas: light-dark(#f6f4ef, #131317);
+    --surface: light-dark(#ffffff, #1c1c22);
+    --surface-sunken: light-dark(#efece5, #24242c);
+    --text: light-dark(#1f1d1a, #ecebe7);
+    --text-quiet: light-dark(#625d55, #a3a09a);
+    --line: light-dark(#e2ded5, #33333c);
+    --accent: light-dark(#0f766e, #5fd0c4);
+    --on-accent: light-dark(#ffffff, #0e1513);
+    --good: light-dark(#1d7a4a, #6fd8a3);
+    --caution: light-dark(#8a5a00, #f2c063);
+    --danger: light-dark(#b3261e, #ff8a80);
+    /* Tints for backgrounds, derived rather than picked. */
+    --accent-tint: color-mix(in oklab, var(--accent) 14%, var(--surface));
+    --good-tint: color-mix(in oklab, var(--good) 14%, var(--surface));
+    --caution-tint: color-mix(in oklab, var(--caution) 16%, var(--surface));
+    --danger-tint: color-mix(in oklab, var(--danger) 12%, var(--surface));
+
+    /* Type: system fonts, a rem scale; headings breathe a little on big screens. */
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    --step--1: 0.875rem;
+    --step-0: 1rem;
+    --step-1: 1.125rem;
+    --step-2: clamp(1.25rem, 1.1rem + 0.5vi, 1.5rem);
+    --step-3: clamp(1.6rem, 1.3rem + 1.2vi, 2.1rem);
+    --leading: 1.5;
+
+    /* Space: one scale, rem based. */
+    --space-3xs: 0.25rem;
+    --space-2xs: 0.5rem;
+    --space-xs: 0.75rem;
+    --space-s: 1rem;
+    --space-m: 1.5rem;
+    --space-l: 2rem;
+    --gutter: clamp(1rem, 0.6rem + 1.6vi, 2rem);
+
+    /* Shape and sizes. */
+    --panel-pad: clamp(1rem, 0.7rem + 1vi, 1.5rem);
+    --radius-s: 0.4rem;
+    --radius-m: 0.75rem;
+    --hairline: 1px solid var(--line);
+    --tap: 2.75rem;
+    --focus: 2px solid var(--accent);
+    /* Admin pages are forms and lists: a centred, comfortable width. */
+    --page: 72rem;
+    --measure: 65ch;
+  }
+}
+
+/* ---- Element defaults --------------------------------------------------- */
+
+@layer base {
+  body {
+    min-block-size: 100dvb;
+    background: var(--canvas);
+    color: var(--text);
+    font: var(--step-0) / var(--leading) var(--font);
+  }
+  h1 { font-size: var(--step-3); line-height: 1.15; letter-spacing: -0.01em; }
+  h2 { font-size: var(--step-2); line-height: 1.25; }
+  h3 { font-size: var(--step-1); line-height: 1.3; }
+  p { max-inline-size: var(--measure); }
+  a { color: var(--accent); text-underline-offset: 0.15em; }
+  a:not(:hover) { text-decoration: none; }
+  :focus-visible { outline: var(--focus); outline-offset: 2px; }
+  code { font: 0.9em var(--font-mono); overflow-wrap: anywhere; }
+  pre { font: var(--step--1) / 1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  time { white-space: nowrap; }
+  ::selection { background: var(--accent-tint); }
+
+  /* Controls: one height, one border, tap-sized. */
+  input:where(:not([type=checkbox], [type=radio])), select, textarea {
+    inline-size: 100%;
+    min-block-size: var(--tap);
+    padding: var(--space-2xs) var(--space-xs);
+    background: var(--canvas);
+    border: var(--hairline);
+    border-radius: var(--radius-s);
+    /* Labels wrap their controls and are bold; what you type is not. */
+    font-weight: 400;
+  }
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offset: -1px; border-color: transparent; }
+  input:disabled { color: var(--text-quiet); }
+  /* A colour is picked, not read: a swatch-sized control. */
+  input[type=color] { inline-size: 5rem; padding: var(--space-3xs); cursor: pointer; }
+  input[type=checkbox], input[type=radio] { inline-size: 1.15em; block-size: 1.15em; accent-color: var(--accent); }
+
+  button, .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2xs);
+    min-block-size: var(--tap);
+    padding: var(--space-2xs) var(--space-s);
+    border: var(--hairline);
+    border-radius: var(--radius-s);
+    background: var(--surface-sunken);
+    color: var(--text);
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  button:hover, .button:hover { background: color-mix(in oklab, var(--surface-sunken), var(--text) 6%); }
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  table { border-collapse: collapse; inline-size: 100%; }
+  th, td { padding: var(--space-2xs) var(--space-xs); text-align: start; border-block-end: var(--hairline); vertical-align: middle; }
+  th { color: var(--text-quiet); font-size: var(--step--1); font-weight: 600; }
+  tbody th { color: var(--text); font-size: inherit; }
+  tbody tr:last-child > * { border-block-end: 0; }
+
+  ul.plain, ol.plain { list-style: none; padding: 0; }
+
+  fieldset { display: grid; gap: var(--space-2xs); min-inline-size: 0; padding: var(--space-xs) var(--space-s) var(--space-s); border: var(--hairline); border-radius: var(--radius-m); }
+  legend { padding-inline: var(--space-3xs); font-weight: 600; }
+  textarea { resize: vertical; line-height: 1.45; }
+  summary { cursor: pointer; inline-size: fit-content; }
+  progress { inline-size: 100%; block-size: 0.6rem; appearance: none; border: 0; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+  progress::-webkit-progress-bar { background: var(--surface-sunken); }
+  progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
+  progress::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    button, .button, a { transition: background-color 0.15s, color 0.15s; }
+  }
+}
+
+/* ---- Components --------------------------------------------------------- */
+
+@layer components {
+  /* Buttons: variants by meaning. */
+  .primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .primary:hover { background: color-mix(in oklab, var(--accent), var(--text) 12%); }
+  .danger { color: var(--danger); }
+  .danger:hover { background: var(--danger-tint); }
+  .quiet { background: transparent; border-color: transparent; color: var(--text-quiet); font-weight: 500; }
+  .quiet:hover { background: var(--surface-sunken); color: var(--text); }
+  /* Compact still meets the tap height; it only loses horizontal room and size. */
+  .compact { padding-inline: var(--space-xs); font-size: var(--step--1); }
+
+  /* Site header: brand and account on one row (the account wraps under the
+     brand at big text sizes), the sections on the next; all three on one row
+     once the header is wide enough. The query is needed because the sections
+     scroll, so their min-content never forces a wrap by itself. */
+  .site-header {
+    container: header / inline-size;
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 10;
+    background: color-mix(in oklab, var(--surface) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-block-end: var(--hairline);
+  }
+  .site-header-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3xs) var(--space-s);
+    max-inline-size: var(--page);
+    margin-inline: auto;
+    padding: var(--space-2xs) var(--gutter);
+  }
+  .brand { margin-inline-end: auto; color: var(--text); font-weight: 800; font-size: var(--step-1); letter-spacing: -0.01em; }
+  .sections {
+    order: 1;
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3xs);
+    /* Wraps on a phone instead of scrolling: every section stays in sight
+       (decision 12), and there are only a handful. */
+    flex-wrap: wrap;
+    padding-block: var(--space-3xs);
+  }
+  .sections a, .account a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--tap);
+    padding-inline: var(--space-2xs);
+    border-radius: var(--radius-s);
+    color: var(--text-quiet);
+    white-space: nowrap;
+  }
+  .sections a:hover, .account a:hover { background: var(--surface-sunken); color: var(--text); }
+  .sections a[aria-current=page], .account a[aria-current=page] { background: var(--accent-tint); color: var(--text); font-weight: 600; }
+  .account { display: flex; align-items: center; gap: var(--space-3xs); }
+  .account a { max-inline-size: min(16rem, 45cqi); overflow: hidden; text-overflow: ellipsis; }
+  .account button { white-space: nowrap; }
+  @container header (inline-size > 52rem) {
+    .sections { order: 0; flex: 1 1 0; }
+  }
+
+  /* Pages. */
+  .page {
+    display: grid;
+    /* minmax(0, 1fr), not auto: a long select or code never widens the page. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-m);
+    align-content: start;
+    max-inline-size: var(--page);
+    margin-inline: auto;
+    padding: var(--space-m) var(--gutter) var(--space-l);
+  }
+  /* Title, a line about the page, and the page's own actions at the end;
+     the actions drop below the title when there is no room beside it. */
+  .page-header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-m); }
+  .page-header > :first-child { flex: 1 1 20rem; min-inline-size: 0; display: grid; gap: var(--space-3xs); }
+  .page-header h1 code { font-size: 0.8em; }
+  .page-actions { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
+  #flash:empty { display: none; }
+
+  /* Log in, join: one centred panel. */
+  .page.auth { --page: 26rem; padding-block-start: clamp(var(--space-l), 10dvb, 6rem); }
+  .wordmark { font-size: var(--step-3); font-weight: 800; letter-spacing: -0.02em; }
+
+  /* Panels: the one surface everything sits on. */
+  .panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-s);
+    align-content: start;
+    padding: var(--panel-pad);
+    background: var(--surface);
+    border: var(--hairline);
+    border-radius: var(--radius-m);
+  }
+  .panel-header { display: grid; gap: var(--space-3xs); }
+  /* A panel header with actions: same wrap as the page header. */
+  .panel-header:has(> .row-actions) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-s); }
+  .panel-header:has(> .row-actions) > :first-child { flex: 1 1 18rem; min-inline-size: 0; display: grid; gap: var(--space-3xs); }
+  .panels { display: grid; gap: var(--space-m); grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); align-items: start; }
+
+  /* A main column with a side column: side by side when both fit, the side
+     below the main one otherwise. */
+  .with-aside { display: flex; flex-wrap: wrap; gap: var(--space-m); align-items: flex-start; }
+  .with-aside > .main-column { flex: 999 1 34rem; min-inline-size: 0; display: grid; gap: var(--space-m); }
+  .with-aside > .side-column { flex: 1 1 20rem; min-inline-size: 0; display: grid; gap: var(--space-m); }
+
+  /* Every one-column grid gets a minmax(0, 1fr) column, never the auto
+     one: an auto column grows to its widest control and the page with it. */
+  :is(.page, .panel, .form, .field, .rows, .row-main, .row-more, .main-column, .side-column, .callout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meta, .hint, .empty { color: var(--text-quiet); }
+  .meta > .hint { font-size: inherit; }
+  .hint { font-size: var(--step--1); font-weight: 400; }
+  .caution { color: var(--caution); }
+
+  /* Forms. */
+  .form { display: grid; gap: var(--space-s); }
+  .field { display: grid; gap: var(--space-3xs); font-weight: 600; }
+  .field .hint { display: block; }
+  /* Short fields share a line while they keep a readable width. */
+  .field-grid { display: grid; gap: var(--space-s); grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); align-items: start; }
+  .field-grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr)); gap: var(--space-2xs); }
+  .checkbox { display: flex; align-items: center; gap: var(--space-2xs); min-block-size: var(--tap); font-weight: 400; }
+  .checkbox > input { flex: none; }
+  /* Choices that wrap into columns (grants, key scopes). */
+  .checklist { display: grid; gap: 0 var(--space-m); grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); }
+  /* A row of controls that wraps: the text input takes what is left. */
+  .field-row { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-xs); align-items: center; }
+  .field-row > input:where(:not([type=checkbox], [type=radio])) { flex: 1 1 14rem; inline-size: auto; }
+  .field-row > select { flex: 1 1 auto; inline-size: auto; max-inline-size: 22rem; }
+  .field-row > :is(button, .button, .checkbox) { flex: 0 1 auto; }
+  .field-row > * { min-inline-size: 0; }
+  .field-row > .push { margin-inline-start: auto; }
+  .form > :is(button, .button), .panel > .button { justify-self: start; }
+  /* Save, then a way out. */
+  .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-s); }
+
+  /* Disclosure: details that open more of the same panel. */
+  .disclosure > summary { color: var(--text-quiet); font-size: var(--step--1); padding-block: var(--space-3xs); }
+  .disclosure > summary:hover { color: var(--text); }
+  .disclosure[open] > summary { margin-block-end: var(--space-xs); }
+
+  /* Messages. */
+  .notice { padding: var(--space-xs) var(--space-s); border-radius: var(--radius-s); border-inline-start: 0.25rem solid; max-inline-size: none; }
+  .notice.error { background: var(--danger-tint); color: var(--danger); }
+  .notice.ok { background: var(--good-tint); color: var(--good); }
+  .notice.warn { background: var(--caution-tint); color: var(--caution); }
+  .callout { display: grid; gap: var(--space-xs); justify-items: start; padding: var(--space-s); background: var(--accent-tint); border-radius: var(--radius-s); }
+  .callout > * { max-inline-size: 100%; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.1em 0.55em;
+    border-radius: 999px;
+    background: var(--surface-sunken);
+    color: var(--text-quiet);
+    font-size: 0.78em;
+    font-weight: 600;
+    line-height: 1.5;
+    vertical-align: 0.1em;
+    white-space: nowrap;
+  }
+  .badge.ok { background: var(--good-tint); color: var(--good); }
+  .badge.warn { background: var(--caution-tint); color: var(--caution); }
+  .badge.error { background: var(--danger-tint); color: var(--danger); }
+
+  .copy-line { display: flex; flex-wrap: wrap; gap: var(--space-2xs); align-items: center; inline-size: 100%; }
+  .copy-line code {
+    flex: 1 1 14rem;
+    min-inline-size: 0;
+    padding: var(--space-2xs) var(--space-xs);
+    background: var(--surface);
+    border: var(--hairline);
+    border-radius: var(--radius-s);
+  }
+  /* Lists of things (calendars, devices, people): rows that wrap. The
+     main block takes the room; actions sit at the end, or drop below it
+     when the row gets narrow. No media query needed. */
+  .rows { list-style: none; padding: 0; display: grid; }
+  .rows > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-s); padding-block: var(--space-xs); border-block-end: var(--hairline); }
+  .rows > li:last-child { border-block-end: 0; }
+  .rows > li:first-child { padding-block-start: 0; }
+  .row-main { flex: 1 1 16rem; min-inline-size: 0; display: grid; gap: 0.1rem; }
+  .row-title { font-weight: 600; }
+  .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); }
+  .row-actions form { display: contents; }
+  .rows > li.off > .row-main { opacity: 0.6; }
+
+  /* A calendar's colour: an SVG square (a fill attribute, not a style, so
+     the CSP allows it). */
+  .swatch { flex: none; inline-size: 1rem; block-size: 1rem; border-radius: 0.25rem; overflow: hidden; }
+  .swatch.big { display: inline-block; inline-size: 0.8em; block-size: 0.8em; margin-inline-end: var(--space-2xs); vertical-align: -0.05em; }
+
+  /* Label and value pairs (a new password, a temporary passphrase). */
+  .facts { display: grid; gap: var(--space-2xs) var(--space-s); grid-template-columns: minmax(0, 1fr); }
+  .facts dt { color: var(--text-quiet); font-size: var(--step--1); font-weight: 600; }
+  .facts dd { margin: 0 0 var(--space-xs); }
+  @media (min-width: 40rem) {
+    .facts { grid-template-columns: max-content minmax(0, 1fr); align-items: center; }
+    .facts dd { margin: 0; }
+  }
+
+  /* Per-collection choices for a device password. */
+  /* Two-factor: the QR code stays dark on white in both themes. */
+  .qr { inline-size: min(100%, 15rem); padding: var(--space-2xs); background: #fff; border-radius: var(--radius-s); }
+  .qr svg { display: block; inline-size: 100%; block-size: auto; }
+  .codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--space-3xs); }
+  .choices { display: grid; gap: var(--space-3xs); padding-inline-start: var(--space-m); }
+  .choices .choice-name { flex: 1 1 12rem; font-weight: 400; }
+  .choices select { flex: 0 1 12rem; }
+
+  /* A group on the people page. */
+  .group { display: grid; gap: var(--space-2xs); padding-block: var(--space-xs); border-block-end: var(--hairline); }
+  .group h3 code { font-size: var(--step--1); font-weight: 400; }
+
+  /* HTMX's own inline indicator styles are off; requests dim their button. */
+  .htmx-request button[type=submit] { opacity: 0.6; }
+  .visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}

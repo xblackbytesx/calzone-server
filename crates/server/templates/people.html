@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}People · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>People</h1><p class="meta">Who can sign in, and the groups you can share with at once.</p></div></header>
+<div class="panels">
+  <section class="panel">
+    <h2>People</h2>
+    <ul class="rows">
+      {% for u in users %}
+      <li{% if u.disabled %} class="off"{% endif %}><div class="row-main"><span class="row-title">{{ u.label() }}{% if u.is_admin %} <span class="badge ok">admin</span>{% endif %}{% if u.disabled %} <span class="badge error">disabled</span>{% endif %}{% if !u.has_passphrase %} <span class="badge warn">no passphrase</span>{% endif %}{% if u.has_totp %} <span class="badge">2FA</span>{% endif %}</span><span class="meta"><code>{{ u.name }}</code></span></div>
+        {% if u.id != me %}<div class="row-actions">
+          {% if u.has_totp %}<form method="post" action="/admin/people/{{ u.id }}/two-factor-reset" hx-confirm="Reset two-factor sign-in for {{ u.label() }}? They are signed out, and set it up again at their next login."><button type="submit" class="compact">Reset two-factor</button></form>{% endif %}
+          <form method="post" action="/admin/people/{{ u.id }}/passphrase" hx-confirm="Give {{ u.label() }} a new temporary passphrase? Their current one stops working."><button type="submit" class="compact">New passphrase</button></form>
+          <form method="post" action="/admin/people/{{ u.id }}/admin"><input type="hidden" name="admin" value="{% if u.is_admin %}off{% else %}on{% endif %}"><button type="submit" class="quiet compact">{% if u.is_admin %}Remove admin{% else %}Make admin{% endif %}</button></form>
+          {% if u.disabled %}<form method="post" action="/admin/people/{{ u.id }}/enable"><button type="submit" class="quiet compact">Enable</button></form>
+          {% else %}<form method="post" action="/admin/people/{{ u.id }}/disable" hx-confirm="Disable {{ u.label() }}? They are signed out and their devices stop syncing."><button type="submit" class="danger compact">Disable</button></form>{% endif %}
+        </div>{% else %}<span class="hint">you</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    <details class="disclosure"><summary>Add a person</summary>
+      <form method="post" action="/admin/people" class="form">
+        <label class="field">Sign-in name <span class="hint">Lowercase letters, digits, dots, dashes. Also their DAV user name.</span><input type="text" name="name" maxlength="64" required pattern="[a-z0-9][a-z0-9._\-]*" autocapitalize="none" spellcheck="false"></label>
+        <label class="field">Display name <input type="text" name="display_name" maxlength="100"></label>
+        <label class="checkbox"><input type="checkbox" name="admin" value="on"> Admin (can manage people)</label>
+        <button type="submit" class="primary">Add and show a passphrase</button>
+      </form>
+    </details>
+  </section>
+  <section class="panel">
+    <h2>Groups</h2>
+    {% if groups.is_empty() %}<p class="empty">No groups. Share with a group and everyone in it gets access.</p>{% endif %}
+    {% for g in groups %}
+    <div class="group">
+      <h3>{{ g.group.label() }} <code class="meta">{{ g.group.name }}</code></h3>
+      {% if g.members.is_empty() %}<p class="empty">Nobody yet.</p>{% else %}
+      <ul class="rows">{% for m in g.members %}<li><div class="row-main">{{ m.label() }}</div>
+        <div class="row-actions"><form method="post" action="/admin/groups/{{ g.group.id }}/members/{{ m.id }}/remove"><button type="submit" class="quiet compact">Remove</button></form></div></li>{% endfor %}</ul>{% endif %}
+      {% if !g.others.is_empty() %}
+      <form method="post" action="/admin/groups/{{ g.group.id }}/members" class="field-row">
+        <select name="member" aria-label="Person to add">{% for o in g.others %}<option value="{{ o.id }}">{{ o.label() }}</option>{% endfor %}</select>
+        <button type="submit" class="compact">Add to group</button>
+      </form>{% endif %}
+    </div>
+    {% endfor %}
+    <details class="disclosure"><summary>Add a group</summary>
+      <form method="post" action="/admin/groups" class="form">
+        <label class="field">Name <input type="text" name="name" maxlength="64" required pattern="[a-z0-9][a-z0-9._\-]*" autocapitalize="none" placeholder="family"></label>
+        <label class="field">Display name <input type="text" name="display_name" maxlength="100" placeholder="Family"></label>
+        <button type="submit" class="primary">Add group</button>
+      </form>
+    </details>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,87 @@
+name: CI
+
+# Every push and pull request: the same gate as `make lint` and `make test`.
+# Releases (images) are release.yml, on a version tag.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: calzone
+          POSTGRES_PASSWORD: calzone
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U calzone"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Each integration test creates and drops its own database here. The
+      # private-corpus tests SKIP in CI (fixtures/private is household data,
+      # never committed).
+      CALZONE_TEST_DATABASE_URL: postgres://calzone:calzone@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The image's dependency-cache stage copies member manifests one by one;
+      # a crate missing there fails the image build (cargo loads the whole
+      # workspace), so catch it here in seconds instead.
+      - name: Dockerfile copies every workspace member
+        run: |
+          for d in crates/*/; do
+            grep -q "^COPY ${d}Cargo.toml " docker/Dockerfile \
+              || { echo "::error::docker/Dockerfile does not COPY ${d}Cargo.toml"; exit 1; }
+          done
+
+      # The version comes from rust-toolchain.toml (one source of truth),
+      # installed explicitly: newer rustup no longer auto-installs it.
+      - name: Install Rust
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --component clippy,rustfmt
+          rustc --version
+
+      - name: Lint
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --release
+
+      # A second, independent DAV client against the real binary: user and
+      # app password from the admin CLI, then python caldav end to end.
+      - name: Interop (python caldav)
+        env:
+          DATABASE_URL: postgres://calzone:calzone@localhost:5432/calzone_interop
+          CALZONE_BIND: 127.0.0.1:8080
+          CALZONE_SECRET_KEY: Y2ktb25seS1rZXktY2ktb25seS1rZXktY2ktb25seSE=
+        run: |
+          python3 -m venv /tmp/py
+          /tmp/py/bin/pip install -q caldav 'psycopg[binary]'
+          /tmp/py/bin/python -c "import psycopg; psycopg.connect('postgresql://calzone:calzone@localhost:5432/postgres', autocommit=True).execute('CREATE DATABASE calzone_interop')"
+          cargo build --release -p calzone-server
+          bin=target/release/calzone-server
+          $bin user add tester
+          pw=$($bin app-password add tester ci | sed -n 's/^    //p')
+          $bin serve & pid=$!
+          for i in $(seq 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          rc=0
+          /tmp/py/bin/python tests/interop/caldav_client.py http://127.0.0.1:8080/ tester "$pw" || rc=$?
+          kill $pid
+          exit $rc

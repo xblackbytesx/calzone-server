@@ -1,0 +1,66 @@
+# LOCAL BUILD of the production image, for smoke-testing it before you tag a
+# release. Not a deployment: no reverse proxy, port published on the host.
+# Run from the repo root (reads ./.env):  make image / make up / make down
+# The deployable example (registry image, Traefik) is deploy/docker-compose.yml.
+name: calzone-server-local
+services:
+  calzone-server:
+    container_name: calzone-server-local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: calzone-server:local
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://calzone:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@calzone-server-local-db:5432/calzone
+      CALZONE_BIND: 0.0.0.0:8080
+      CALZONE_PUBLIC_URL: ${CALZONE_PUBLIC_URL:-}
+      CALZONE_COOKIE_SECURE: ${CALZONE_COOKIE_SECURE:-off}
+      CALZONE_DAV: ${CALZONE_DAV:-on}
+      CALZONE_SECRET_KEY: ${CALZONE_SECRET_KEY:?set CALZONE_SECRET_KEY in .env}
+      CALZONE_TWO_FACTOR: ${CALZONE_TWO_FACTOR:-admins}
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      calzone-server-local-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  calzone-server-local-db:
+    container_name: calzone-server-local-db
+    image: docker.io/library/postgres:17-alpine
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - FOWNER
+      - SETGID
+      - SETUID
+    environment:
+      POSTGRES_DB: calzone
+      POSTGRES_USER: calzone
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ${CALZONE_DB_DIR:-../data/postgres}:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -d "$${POSTGRES_DB}" -U "$${POSTGRES_USER}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

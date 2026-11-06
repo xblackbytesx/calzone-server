@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Settings · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>Settings</h1><p class="meta">You sign in as <code>{{ name }}</code>.</p></div></header>
+{% if let Some(s) = saved %}<p class="notice ok" role="status">{{ s }}</p>{% endif %}
+<div class="panels">
+  <section class="panel">
+    <h2>Your name</h2>
+    <form method="post" action="/settings/profile" class="form">
+      <label class="field">Shown to others as <input type="text" name="display_name" value="{{ display_name }}" maxlength="100" placeholder="{{ name }}"></label>
+      <button type="submit" class="primary">Save</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Passphrase</h2>
+    <form method="post" action="/settings/passphrase" class="form">
+      <label class="field">Current passphrase <input type="password" name="current" autocomplete="current-password" required></label>
+      <label class="field">New passphrase <span class="hint">At least {{ min }} characters. A few words you will remember works well.</span>
+        <input type="password" name="new" autocomplete="new-password" minlength="{{ min }}" required></label>
+      <label class="field">New passphrase again <input type="password" name="repeat" autocomplete="new-password" minlength="{{ min }}" required></label>
+      <button type="submit" class="primary">Change passphrase</button>
+    </form>
+    <p class="hint">Changing it signs you out everywhere else. Device passwords keep working.</p>
+  </section>
+  <section class="panel">
+    <h2>Two-factor sign-in</h2>
+    {% if has_totp %}
+    <p><span class="badge ok">on</span> Signing in asks for a code from your authenticator app. {{ codes_left }} recovery code{% if codes_left != 1 %}s{% endif %} left.</p>
+    <form method="post" action="/settings/two-factor/recovery" class="form">
+      <div class="field-row"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required placeholder="Code from the app" aria-label="Code from the app"><button type="submit">New recovery codes</button></div>
+    </form>
+    {% if !totp_required %}
+    <details class="disclosure"><summary>Turn it off</summary>
+      <form method="post" action="/settings/two-factor/off" class="form">
+        <label class="field">Passphrase <input type="password" name="passphrase" autocomplete="current-password" required></label>
+        <label class="field">Code from the app or a recovery code <input type="text" name="code" autocomplete="one-time-code" maxlength="20" required></label>
+        <button type="submit" class="danger">Turn off two-factor sign-in</button>
+      </form>
+    </details>
+    {% else %}<p class="hint">Required for your account on this server.</p>{% endif %}
+    {% else %}
+    <p>After your passphrase, also ask for a code from an app on your phone, so a leaked passphrase alone is not enough.{% if totp_required %} Required for your account.{% endif %}</p>
+    <a class="button primary" href="/settings/two-factor">Set up</a>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

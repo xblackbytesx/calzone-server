@@ -1,0 +1,15 @@
+[package]
+name = "calzone-dav"
+description = "CalZone CalDAV/CardDAV door (optional, CALZONE_DAV)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+calzone-core.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono-tz = "0.10"
+quick-xml = "0.39"
+percent-encoding = "2.3"
+thiserror.workspace = true

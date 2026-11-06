@@ -1,0 +1,22 @@
+[package]
+name = "calzone-core"
+description = "CalZone core: domain model, iCalendar/vCard, recurrence, per-user split"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+# Pinned exactly (decision 25): upstream stopped publishing after 0.3.14 and
+# moved the code under AGPL. Used to read dates and expand recurrence only;
+# its writer never touches stored objects. No JMAP.
+calcard = { version = "=0.3.14", default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono-tz = "0.10"
+
+[dev-dependencies]
+serde_json.workspace = true
+# Independent recurrence implementation to cross-check calcard on the corpus.
+rrule = "0.14"

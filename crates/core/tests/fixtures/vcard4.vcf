@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//synthetic//vcard4//EN
+UID:urn:uuid:00000000-0000-4000-8000-000000000004
+FN:Synthetic Person
+N:Person;Synthetic;;;
+EMAIL;TYPE=home;PREF=1:person@example.org
+TEL;VALUE=uri;TYPE="voice,cell":tel:+31-6-00000000
+END:VCARD

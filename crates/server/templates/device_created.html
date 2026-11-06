@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Device added · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ label }} is ready</h1><p class="meta">Enter these on the device now. The password is shown only this once.</p></div></header>
+<section class="panel">
+  <dl class="facts">
+    <dt>Server</dt><dd><div class="copy-line"><code id="server">{{ server }}</code><button type="button" class="compact" data-copy="#server">Copy</button></div></dd>
+    <dt>User name</dt><dd><div class="copy-line"><code id="user">{{ user_name }}</code><button type="button" class="compact" data-copy="#user">Copy</button></div></dd>
+    <dt>Password</dt><dd><div class="copy-line"><code id="password">{{ password }}</code><button type="button" class="compact" data-copy="#password">Copy</button></div></dd>
+  </dl>
+  <p class="hint">In DAVx5 choose "Login with URL and user name". Capitals, spaces and dashes in the password do not matter.</p>
+  <a class="button primary" href="/devices">Done</a>
+</section>
+{% endblock %}

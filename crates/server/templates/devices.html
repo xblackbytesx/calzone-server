@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Devices · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>Devices</h1><p class="meta">A password for each phone or app that syncs with CalZone (DAVx5, Thunderbird). Remove one and that device stops syncing; the others keep working.</p></div></header>
+<div class="panels">
+  <section class="panel">
+    <h2>Your devices</h2>
+    {% if devices.is_empty() %}<p class="empty">None yet.</p>{% else %}
+    <ul class="rows">
+      {% for d in devices %}
+      <li><div class="row-main"><span class="row-title">{{ d.label }}</span><span class="meta">{{ d.scope }}</span><span class="hint">Added {{ d.created }}, last used {{ d.used }}</span></div>
+        <div class="row-actions"><form method="post" action="/devices/{{ d.id }}/revoke" hx-confirm="Remove {{ d.label }}? It stops syncing right away."><button type="submit" class="danger compact">Remove</button></form></div></li>
+      {% endfor %}
+    </ul>{% endif %}
+  </section>
+  <section class="panel">
+    <h2>Add a device</h2>
+    <form method="post" action="/devices" class="form">
+      <label class="field">Name <span class="hint">So you recognise it later.</span><input type="text" name="label" maxlength="100" required placeholder="Pixel, DAVx5"></label>
+      <fieldset><legend>It may reach</legend>
+        <label class="checkbox"><input type="radio" name="limit" value="all" checked> Everything you can reach</label>
+        <label class="checkbox"><input type="radio" name="limit" value="some"> Only these:</label>
+        <div class="choices">
+        {% for ch in choices %}
+          <label class="field-row"><span class="choice-name">{{ ch.label }}</span>
+            <select name="c-{{ ch.id }}" aria-label="{{ ch.label }}"><option value="none">no</option><option value="read">view</option>{% if ch.writable %}<option value="write">view and edit</option>{% endif %}</select></label>
+        {% endfor %}
+        </div>
+      </fieldset>
+      <button type="submit" class="primary">Create password</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

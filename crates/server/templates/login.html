@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Log in · CalZone{% endblock %}
+{% block main_class %}auth{% endblock %}
+{% block content %}
+<section class="panel">
+  <header class="panel-header">
+    <h1 class="wordmark">CalZone</h1>
+    <p class="meta">Your household's calendars and contacts.</p>
+  </header>
+  {% if let Some(e) = error %}<p class="notice error" role="alert">{{ e }}</p>{% endif %}
+  <form method="post" action="/login" class="form">
+    <label class="field">Name <input type="text" name="name" value="{{ name }}" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus></label>
+    <label class="field">Passphrase <input type="password" name="passphrase" autocomplete="current-password" required></label>
+    <label class="checkbox"><input type="checkbox" name="remember" value="on"> Keep me signed in on this device</label>
+    <p class="hint">Leave it off on a work or shared computer: you are signed out when the browser closes, and after 12 hours at most.</p>
+    <button type="submit" class="primary">Log in</button>
+  </form>
+  <p class="hint">No passphrase yet? Ask whoever runs CalZone. First time on a new server: <code>calzone-server user add NAME</code>, <code>calzone-server user admin NAME on</code>, then <code>calzone-server user passphrase NAME</code>.</p>
+</section>
+{% endblock %}

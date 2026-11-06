@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div>
+  <h1>{% if calendar %}<svg class="swatch big" viewBox="0 0 1 1" aria-hidden="true"><rect width="1" height="1" fill="{{ color }}"/></svg>{% endif %}{{ name }}</h1>
+  <p class="meta">{% if calendar %}Calendar{% else %}Address book{% endif %}{% if !owner %} of {{ c.owner_name }}, you {{ level }}{% endif %}.</p>
+</div><div class="page-actions"><a class="button quiet" href="/collections">All calendars &amp; contacts</a></div></header>
+<div class="panels">
+  {% if can_admin %}
+  <section class="panel">
+    <h2>Details</h2>
+    <form method="post" action="/collections/{{ c.id }}" class="form">
+      <label class="field">Name <input type="text" name="name" value="{{ name }}" maxlength="100" required></label>
+      <label class="field">Description <textarea name="description" rows="2" maxlength="1000">{{ c.description }}</textarea></label>
+      {% if calendar %}<label class="field">Colour <input type="color" name="color" value="{{ color }}"></label>{% endif %}
+      <button type="submit" class="primary">Save</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Shared with</h2>
+    {% if grants.is_empty() %}<p class="empty">Only {% if owner %}you{% else %}{{ c.owner_name }}{% endif %} so far.</p>{% else %}
+    <ul class="rows">
+      {% for g in grants %}
+      <li><div class="row-main"><span class="row-title">{{ g.label }}</span><span class="meta">{{ g.level }}</span></div>
+        <div class="row-actions"><form method="post" action="/collections/{{ c.id }}/unshare/{{ g.id }}"><button type="submit" class="quiet compact">Stop sharing</button></form></div></li>
+      {% endfor %}
+    </ul>{% endif %}
+    {% if !candidates.is_empty() %}
+    <form method="post" action="/collections/{{ c.id }}/share" class="form">
+      <div class="field-row">
+        <select name="principal" aria-label="Person or group">{% for p in candidates %}<option value="{{ p.id }}">{{ p.label }}</option>{% endfor %}</select>
+        <select name="level" aria-label="What they may do">
+          <option value="read">can view</option>
+          <option value="write" selected>can edit</option>
+          <option value="admin">can edit and share</option>
+        </select>
+        <button type="submit" class="primary">Share</button>
+      </div>
+    </form>{% endif %}
+  </section>
+  {% else %}
+  <section class="panel">
+    <h2>Details</h2>
+    {% if !c.description.is_empty() %}<p>{{ c.description }}</p>{% endif %}
+    <p class="meta">Only {{ c.owner_name }} can rename or share it.</p>
+  </section>
+  {% endif %}
+  {% if let Some(url) = dav_url %}
+  <section class="panel">
+    <h2>On other apps</h2>
+    <p>DAVx5 and Thunderbird find it by themselves from the server address. Some apps want this address instead:</p>
+    <div class="copy-line"><code id="dav-url">{{ url }}</code><button type="button" class="compact" data-copy="#dav-url">Copy</button></div>
+    <p class="hint">Sign in with a password from <a href="/devices">Devices</a>.</p>
+  </section>
+  {% endif %}
+  <section class="panel">
+    <h2>Download</h2>
+    <p>Everything in it as one {% if calendar %}calendar file (.ics){% else %}contacts file (.vcf){% endif %}{% if calendar %}, your reminders included{% endif %}.</p>
+    <a class="button" href="/collections/{{ c.id }}/export" hx-boost="false" download>Download {{ name }}</a>
+  </section>
+  {% if can_admin %}
+  <section class="panel">
+    <h2>Delete</h2>
+    <p>This removes every {% if calendar %}event and task{% else %}contact{% endif %} in it, for everyone it is shared with, on every device. It cannot be undone.</p>
+    <form method="post" action="/collections/{{ c.id }}/delete" class="form">
+      <label class="field"><span>Type <strong>{{ name }}</strong> to confirm</span> <input type="text" name="confirm" autocomplete="off" required></label>
+      <button type="submit" class="danger">Delete {{ name }}</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

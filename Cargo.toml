@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+# core: the domain model, iCalendar/vCard content lines, recurrence, the
+# per-user split, sync types. Pure, no IO: the server and (through ffi) the
+# Android app run the same code, so they always agree.
+# dav: the optional CalDAV/CardDAV door. Talks to the domain service only.
+# server: storage, sharing, auth, the web app, the doors; the binary.
+# ffi joins in phase 4 (UniFFI bindings for the app).
+members = ["crates/core", "crates/dav", "crates/server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+calzone-core = { path = "crates/core" }
+calzone-dav = { path = "crates/dav" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+
+[profile.release]
+lto = "thin"
+strip = true

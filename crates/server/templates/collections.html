@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Calendars &amp; contacts · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>Calendars &amp; contacts</h1><p class="meta">Yours and the ones shared with you.</p></div></header>
+<div class="panels">
+  <section class="panel">
+    <h2>Calendars</h2>
+    {% if calendars.is_empty() %}<p class="empty">No calendars yet.</p>{% else %}
+    <ul class="rows">
+      {% for r in calendars %}
+      <li><svg class="swatch" viewBox="0 0 1 1" aria-hidden="true"><rect width="1" height="1" fill="{{ r.color }}"/></svg>
+        <div class="row-main"><a class="row-title" href="/collections/{{ r.id }}">{{ r.name }}</a>{% if !r.shared.is_empty() %}<span class="meta">{{ r.shared }}</span>{% endif %}</div></li>
+      {% endfor %}
+    </ul>{% endif %}
+  </section>
+  <section class="panel">
+    <h2>Address books</h2>
+    {% if books.is_empty() %}<p class="empty">No address books yet.</p>{% else %}
+    <ul class="rows">
+      {% for r in books %}
+      <li><div class="row-main"><a class="row-title" href="/collections/{{ r.id }}">{{ r.name }}</a>{% if !r.shared.is_empty() %}<span class="meta">{{ r.shared }}</span>{% endif %}</div></li>
+      {% endfor %}
+    </ul>{% endif %}
+  </section>
+  <section class="panel">
+    <h2>Add one</h2>
+    <form method="post" action="/collections" class="form">
+      <fieldset><legend>Kind</legend>
+        <label class="checkbox"><input type="radio" name="kind" value="calendar" checked> Calendar</label>
+        <label class="checkbox"><input type="radio" name="kind" value="addressbook"> Address book</label>
+      </fieldset>
+      <label class="field">Name <input type="text" name="name" maxlength="100" required placeholder="Family"></label>
+      <label class="field">Colour <span class="hint">Calendars only.</span><input type="color" name="color" value="#3a7bd5"></label>
+      <button type="submit" class="primary">Add</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

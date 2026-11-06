@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Recovery codes · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{% if first %}Two-factor sign-in is on{% else %}New recovery codes{% endif %}</h1><p class="meta">Keep these somewhere safe, away from your phone: a password manager, or on paper. Each one lets you in once if your phone is lost. They are shown only now.</p></div></header>
+<section class="panel">
+  <ul class="plain codes" id="codes">{% for c in codes %}<li><code>{{ c }}</code></li>{% endfor %}</ul>
+  <div class="form-actions"><button type="button" data-copy="#codes">Copy all</button> <a class="button primary" href="/collections">Done</a></div>
+  {% if !first %}<p class="hint">Your old recovery codes no longer work.</p>{% endif %}
+</section>
+{% endblock %}

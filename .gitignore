@@ -1,0 +1,59 @@
+# --- Rust build output ---
+/target
+# make android-core output (phase 4; the app reads it from here)
+/dist
+
+# --- Local data (make up) ---
+/data
+
+# --- IDE / assistant tooling ---
+# Local scratch directories various editors and coding assistants create in the
+# repo root. None of them belong in the history.
+.idea/
+.vscode/
+.fleet/
+.claude/
+.cursor/
+.aider*
+.continue/
+.windsurf/
+*.iml
+*.swp
+*~
+
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# --- Database dumps ---
+*.dump
+*.sql.gz
+backups/
+
+# --- OS noise / logs ---
+.DS_Store
+Thumbs.db
+*.log
+
+# --- Personal data. Never commit. ---
+# The household Baikal export used by the private-corpus tests.
+/fixtures/private/
+# Calendar and contact data anywhere (Baikal and Takeout exports, CalZone's
+# own "Download everything" zips, "not imported" downloads), except the
+# hand-written synthetic test fixtures.
+*.ics
+*.ical
+*.ifb
+*.vcf
+*.vcard
+!/crates/core/tests/fixtures/*.ics
+!/crates/core/tests/fixtures/*.vcf
+*.zip
+not-imported-*
+# SQL dumps (`pg_dump > calzone.sql`), but not the migrations.
+*.sql
+!/crates/server/migrations/*.sql

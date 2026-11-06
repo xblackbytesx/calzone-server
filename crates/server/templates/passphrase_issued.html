@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Temporary passphrase · CalZone{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>A passphrase for {{ who }}</h1><p class="meta">Give it to them in person. It is shown only this once, and they should change it under Settings after signing in.</p></div></header>
+<section class="panel">
+  <dl class="facts">
+    <dt>Address</dt><dd><code>{{ server }}</code></dd>
+    <dt>Name</dt><dd><code>{{ name }}</code></dd>
+    <dt>Passphrase</dt><dd><div class="copy-line"><code id="passphrase">{{ passphrase }}</code><button type="button" class="compact" data-copy="#passphrase">Copy</button></div></dd>
+  </dl>
+  <a class="button primary" href="/admin/people">Done</a>
+</section>
+{% endblock %}
