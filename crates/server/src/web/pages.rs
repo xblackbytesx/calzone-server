@@ -5,13 +5,13 @@ use std::time::Instant;
 use askama::Template;
 use axum::Form;
 use axum::extract::{RawQuery, State};
-use axum::http::StatusCode;
 use axum::http::header::SET_COOKIE;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect};
 use serde::Deserialize;
 
 use super::session::{self, SessionToken, SignedIn, WebUser};
-use super::{Nav, Page, WebError, html};
+use super::{Nav, Page, WebError, html, i18n};
 use crate::AppState;
 use crate::audit::{self, Reason, Service};
 use crate::client::ClientAddr;
@@ -25,7 +25,7 @@ pub(super) const PER_ACCOUNT: u32 = 5;
 pub async fn home(State(st): State<AppState>, user: Option<SignedIn>) -> Redirect {
     Redirect::to(match user {
         Some(SignedIn(u)) if u.must_enrol(&st) => "/settings/two-factor",
-        Some(_) => "/collections",
+        Some(_) => "/calendar",
         None => "/login",
     })
 }
@@ -35,10 +35,19 @@ pub async fn home(State(st): State<AppState>, user: Option<SignedIn>) -> Redirec
 struct LoginPage {
     name: String,
     error: Option<&'static str>,
+    t: &'static i18n::T,
+    lang: &'static str,
 }
 
-pub async fn login_page() -> Page {
-    html(LoginPage { name: String::new(), error: None })
+/// Before login the browser's language decides (decision 35).
+fn browser_lang(headers: &HeaderMap) -> (&'static i18n::T, &'static str) {
+    let l = i18n::lang(None, headers);
+    (i18n::t(l), i18n::code(l))
+}
+
+pub async fn login_page(headers: HeaderMap) -> Page {
+    let (t, lang) = browser_lang(&headers);
+    html(LoginPage { name: String::new(), error: None, t, lang })
 }
 
 #[derive(Deserialize)]
@@ -54,9 +63,10 @@ fn account_key(name: &str) -> String {
     format!("web-user:{}", name.trim().to_ascii_lowercase())
 }
 
-pub async fn login(State(st): State<AppState>, addr: ClientAddr, Form(f): Form<LoginForm>) -> Page {
+pub async fn login(State(st): State<AppState>, addr: ClientAddr, headers: HeaderMap, Form(f): Form<LoginForm>) -> Page {
+    let (t, lang) = browser_lang(&headers);
     let again = |error, status| -> Page {
-        let mut r = html(LoginPage { name: f.name.clone(), error: Some(error) })?;
+        let mut r = html(LoginPage { name: f.name.clone(), error: Some(error), t, lang })?;
         *r.status_mut() = status;
         Ok(r)
     };
@@ -65,7 +75,7 @@ pub async fn login(State(st): State<AppState>, addr: ClientAddr, Form(f): Form<L
     // Checked before Argon2 runs, so a blocked guesser costs no CPU.
     if st.throttle.blocked(&addr_key, PER_ADDRESS, now) || st.throttle.blocked(&acct_key, PER_ACCOUNT, now) {
         audit::auth_failure(Service::Web, Reason::Throttled, addr.0);
-        return again("Too many failed attempts. Wait 15 minutes and try again.", StatusCode::TOO_MANY_REQUESTS);
+        return again(t.too_many_logins, StatusCode::TOO_MANY_REQUESTS);
     }
     match accounts::check_login(&st.pool, &f.name, &f.passphrase).await? {
         Some(user) => {
@@ -83,7 +93,7 @@ pub async fn login(State(st): State<AppState>, addr: ClientAddr, Form(f): Form<L
             let token = accounts::create_session(&st.pool, user, persistent).await?;
             Ok((
                 [(SET_COOKIE, session::session_cookie(&token, st.cookie_secure, persistent))],
-                Redirect::to("/collections"),
+                Redirect::to("/calendar"),
             )
                 .into_response())
         }
@@ -93,7 +103,7 @@ pub async fn login(State(st): State<AppState>, addr: ClientAddr, Form(f): Form<L
             audit::auth_failure(Service::Web, Reason::Wrong, addr.0);
             // The same answer for an unknown name, a disabled account, no
             // passphrase yet and a wrong passphrase.
-            again("Wrong name or passphrase.", StatusCode::UNAUTHORIZED)
+            again(t.wrong_login, StatusCode::UNAUTHORIZED)
         }
     }
 }

@@ -67,17 +67,19 @@ pub struct Changes {
     pub deleted: Vec<String>,
 }
 
-struct Locked {
-    kind: CollectionKind,
-    components: Vec<String>,
-    sequence: i64,
-    access: Access,
+pub(super) struct Locked {
+    pub(super) kind: CollectionKind,
+    pub(super) components: Vec<String>,
+    /// The collection's sequence so far in this transaction: each write
+    /// takes the next one, so two writes in one transaction stay distinct.
+    pub(super) sequence: i64,
+    pub(super) access: Access,
 }
 
 /// Lock the collection row and check access. Every write goes through this,
 /// so writes to one collection are serialised and each takes its sequence
 /// number inside the lock.
-async fn lock(tx: &mut Transaction<'_, Postgres>, actor: Actor, collection: Uuid) -> Result<Locked> {
+pub(super) async fn lock(tx: &mut Transaction<'_, Postgres>, actor: Actor, collection: Uuid) -> Result<Locked> {
     let row: Option<(String, Vec<String>, i64)> =
         sqlx::query_as("SELECT kind, components, sequence FROM collections WHERE id = $1 FOR UPDATE")
             .bind(collection)
@@ -94,7 +96,7 @@ async fn readable(pool: &PgPool, actor: Actor, collection: Uuid) -> Result<Acces
 }
 
 /// What a body becomes before it is stored.
-struct Prepared {
+pub(super) struct Prepared {
     uid: String,
     kind: &'static str,
     shared: String,
@@ -107,7 +109,7 @@ struct Prepared {
     emails: Vec<String>,
 }
 
-fn prepare(kind: CollectionKind, components: &[String], body: &str) -> Result<Prepared> {
+pub(super) fn prepare(kind: CollectionKind, components: &[String], body: &str) -> Result<Prepared> {
     let mut doc = Document::parse(body).map_err(|e| DomainError::Invalid(e.to_string()))?;
     match kind {
         CollectionKind::Calendar => {
@@ -174,7 +176,7 @@ pub async fn put(
         return Err(DomainError::BadName);
     }
     let mut tx = pool.begin().await?;
-    let locked = lock(&mut tx, actor, collection).await?;
+    let mut locked = lock(&mut tx, actor, collection).await?;
     if !locked.access.can_write() {
         return Err(DomainError::ReadOnly);
     }
@@ -182,7 +184,9 @@ pub async fn put(
     if p.uid.is_empty() {
         p.uid = format!("name:{name}");
     }
-    store(tx, &locked, actor, collection, name, p, pre).await
+    let w = store(&mut tx, &mut locked, actor, collection, name, p, pre).await?;
+    tx.commit().await?;
+    Ok(w)
 }
 
 /// How an imported object landed.
@@ -210,7 +214,7 @@ pub async fn upsert(
         return Err(DomainError::BadName);
     }
     let mut tx = pool.begin().await?;
-    let locked = lock(&mut tx, actor, collection).await?;
+    let mut locked = lock(&mut tx, actor, collection).await?;
     if !locked.access.can_write() {
         return Err(DomainError::ReadOnly);
     }
@@ -237,15 +241,16 @@ pub async fn upsert(
         }
         None => name.to_string(),
     };
-    let w = store(tx, &locked, actor, collection, &name, p, Precondition::None).await?;
+    let w = store(&mut tx, &mut locked, actor, collection, &name, p, Precondition::None).await?;
+    tx.commit().await?;
     Ok((if w.created { Upserted::Created } else { Upserted::Updated }, name))
 }
 
 /// The write itself, inside the collection lock: preconditions, the UID
 /// check, the row, the actor's layer and the change log, then commit.
-async fn store(
-    mut tx: Transaction<'_, Postgres>,
-    locked: &Locked,
+pub(super) async fn store(
+    tx: &mut Transaction<'_, Postgres>,
+    locked: &mut Locked,
     actor: Actor,
     collection: Uuid,
     name: &str,
@@ -256,7 +261,7 @@ async fn store(
         sqlx::query_as("SELECT id, revision FROM objects WHERE collection_id = $1 AND name = $2")
             .bind(collection)
             .bind(name)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **tx)
             .await?;
     match (&pre, &existing) {
         (Precondition::IfMatch(want), Some((_, rev))) if *want == etag(*rev) => {}
@@ -270,17 +275,18 @@ async fn store(
             .bind(collection)
             .bind(&p.uid)
             .bind(name)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **tx)
             .await?;
     if let Some(existing) = clash {
         return Err(DomainError::UidConflict { existing });
     }
 
     let seq = locked.sequence + 1;
+    locked.sequence = seq;
     sqlx::query("UPDATE collections SET sequence = $2 WHERE id = $1")
         .bind(collection)
         .bind(seq)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO objects (id, collection_id, name, uid, kind, body, revision, undated, starts_at, ends_at,
@@ -306,14 +312,14 @@ async fn store(
     .bind(p.recurring)
     .bind(&p.summary)
     .bind(&p.emails)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **tx)
     .await?;
     if let Some(layer) = &p.layer {
         if layer.entries.is_empty() {
             sqlx::query("DELETE FROM user_layers WHERE object_id = $1 AND principal_id = $2")
                 .bind(id)
                 .bind(actor)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
         } else {
             sqlx::query(
@@ -323,7 +329,7 @@ async fn store(
             .bind(id)
             .bind(actor)
             .bind(Json(layer))
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
     }
@@ -331,9 +337,8 @@ async fn store(
         .bind(collection)
         .bind(seq)
         .bind(name)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-    tx.commit().await?;
     Ok(Written {
         meta: ObjectMeta { name: name.to_string(), uid: p.uid, kind: p.kind.to_string(), revision: seq },
         created: existing.is_none(),
@@ -384,7 +389,7 @@ pub async fn get(pool: &PgPool, actor: Actor, collection: Uuid, name: &str) -> R
     Ok(row.ok_or(DomainError::NotFound)?.into())
 }
 
-fn served_body(body: String, layer: Option<Json<UserLayer>>) -> String {
+pub(super) fn served_body(body: String, layer: Option<Json<UserLayer>>) -> String {
     let Some(Json(layer)) = layer else { return body };
     match Document::parse(&body) {
         Ok(mut doc) => {
@@ -466,12 +471,25 @@ pub async fn in_range(
 /// Delete an object; it stays in the change log as a tombstone.
 pub async fn delete(pool: &PgPool, actor: Actor, collection: Uuid, name: &str, pre: Precondition) -> Result<()> {
     let mut tx = pool.begin().await?;
-    let locked = lock(&mut tx, actor, collection).await?;
+    let mut locked = lock(&mut tx, actor, collection).await?;
+    delete_in(&mut tx, &mut locked, collection, name, pre).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// The delete itself, inside the collection lock (no commit).
+pub(super) async fn delete_in(
+    tx: &mut Transaction<'_, Postgres>,
+    locked: &mut Locked,
+    collection: Uuid,
+    name: &str,
+    pre: Precondition,
+) -> Result<()> {
     let existing: Option<i64> =
         sqlx::query_scalar("SELECT revision FROM objects WHERE collection_id = $1 AND name = $2")
             .bind(collection)
             .bind(name)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **tx)
             .await?;
     let Some(rev) = existing else { return Err(DomainError::NotFound) };
     if !locked.access.can_write() {
@@ -483,23 +501,23 @@ pub async fn delete(pool: &PgPool, actor: Actor, collection: Uuid, name: &str, p
         _ => {}
     }
     let seq = locked.sequence + 1;
+    locked.sequence = seq;
     sqlx::query("UPDATE collections SET sequence = $2 WHERE id = $1")
         .bind(collection)
         .bind(seq)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     sqlx::query("DELETE FROM objects WHERE collection_id = $1 AND name = $2")
         .bind(collection)
         .bind(name)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     sqlx::query("INSERT INTO changes (collection_id, sequence, name, deleted) VALUES ($1, $2, $3, TRUE)")
         .bind(collection)
         .bind(seq)
         .bind(name)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-    tx.commit().await?;
     Ok(())
 }
 

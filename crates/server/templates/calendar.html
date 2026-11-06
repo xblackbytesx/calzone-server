@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block title %}{{ nav.t.calendar_title }} · CalZone{% endblock %}
+{% block main_class %}calendar-page{% endblock %}
+{% block content %}
+<div class="cal" id="cal-app" data-strings="{{ strings }}" data-config="{{ config }}" hx-boost="false">
+  <div class="cal-toolbar">
+    <div class="cal-nav">
+      <button type="button" class="compact" data-cal="today">{{ nav.t.today }}</button>
+      <button type="button" class="compact quiet" data-cal="prev" aria-label="{{ nav.t.previous }}">‹</button>
+      <button type="button" class="compact quiet" data-cal="next" aria-label="{{ nav.t.next }}">›</button>
+      <h1 class="cal-title" id="cal-title">{{ nav.t.calendar_title }}</h1>
+    </div>
+    <div class="cal-views" role="group" aria-label="{{ nav.t.views }}">
+      <button type="button" class="compact" data-view="listMonth">{{ nav.t.view_agenda }}</button>
+      <button type="button" class="compact" data-view="timeGridDay">{{ nav.t.view_day }}</button>
+      <button type="button" class="compact" data-view="timeGridWeek">{{ nav.t.view_week }}</button>
+      <button type="button" class="compact" data-view="dayGridMonth">{{ nav.t.view_month }}</button>
+    </div>
+    {% if has_calendar %}
+    <form class="cal-quick" id="cal-quick" autocomplete="off">
+      <input type="text" name="text" placeholder="{{ nav.t.quick_add_placeholder }}" aria-label="{{ nav.t.quick_add }}" maxlength="500" enterkeyhint="done">
+    </form>
+    <button type="button" class="primary compact cal-new" data-cal="new" aria-label="{{ nav.t.new_event }}"><span aria-hidden="true">+</span><span class="cal-new-text"> {{ nav.t.new_event }}</span></button>
+    {% endif %}
+  </div>
+  {% if !has_calendar %}<p class="notice">{{ nav.t.no_calendar }}</p>{% endif %}
+  <div id="cal-grid" class="cal-grid"></div>
+  <p class="hint cal-keys">{{ nav.t.shortcuts }}</p>
+</div>
+<div id="cal-panel" class="cal-panel" hidden hx-boost="false"></div>
+<dialog id="cal-scope" class="cal-scope" aria-labelledby="cal-scope-q">
+  <form method="dialog" class="form">
+    <p id="cal-scope-q" class="cal-scope-q"></p>
+    <button type="submit" value="this">{{ nav.t.scope_this }}</button>
+    <button type="submit" value="following">{{ nav.t.scope_following }}</button>
+    <button type="submit" value="all">{{ nav.t.scope_all }}</button>
+    <button type="submit" value="" class="quiet">{{ nav.t.cancel }}</button>
+  </form>
+</dialog>
+<div id="cal-toast" class="cal-toast" role="status" aria-live="polite" hidden><span class="cal-toast-text"></span> <button type="button" class="compact" data-cal="undo" hidden>{{ nav.t.msg_undo }}</button></div>
+{% endblock %}

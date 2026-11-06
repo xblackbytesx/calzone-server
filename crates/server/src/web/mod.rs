@@ -8,7 +8,11 @@
 //! domain service only.
 
 mod admin;
+mod api;
+mod calendar;
 mod collections;
+mod contacts;
+pub mod i18n;
 mod pages;
 mod passwords;
 pub mod session;
@@ -64,6 +68,28 @@ pub fn routes(dav: bool) -> Router<AppState> {
         .route("/admin/groups", post(admin::create_group))
         .route("/admin/groups/{id}/members", post(admin::add_member))
         .route("/admin/groups/{id}/members/{member}/remove", post(admin::remove_member))
+        .route("/contacts", get(contacts::list))
+        .route("/contacts/new", get(contacts::new_form).post(contacts::create))
+        .route("/contacts/undo/{change}", post(contacts::undo))
+        .route("/contacts/photo/{c}/{n}", get(contacts::photo))
+        .route("/contacts/{c}/{n}", get(contacts::show).post(contacts::update))
+        .route("/contacts/{c}/{n}/edit", get(contacts::edit_form))
+        .route("/contacts/{c}/{n}/delete", post(contacts::delete))
+        .route("/calendar", get(calendar::page))
+        .route("/calendar/event", get(calendar::event))
+        .route("/calendar/event/new", get(calendar::new_event))
+        .route("/static/event-calendar.min.js", get(|h: HeaderMap| asset(h, &EC_JS, "text/javascript")))
+        .route("/static/event-calendar.min.css", get(|h: HeaderMap| asset(h, &EC_CSS, "text/css")))
+        .route("/static/calendar.js", get(|h: HeaderMap| asset(h, &CAL_JS, "text/javascript")))
+        .route("/api/occurrences", get(api::occurrences))
+        .route("/api/events", post(api::create))
+        .route("/api/events/{collection}/{name}", post(api::update))
+        .route("/api/events/{collection}/{name}/delete", post(api::delete))
+        .route("/api/undo/{change}", post(api::undo))
+        .route("/api/quickadd", post(api::quickadd))
+        .route("/api/settings", get(api::settings).post(api::save_settings))
+        .route("/api/calendars", get(api::calendars))
+        .route("/api/calendars/{id}/prefs", post(api::save_prefs))
         .route("/import", get(transfer::page))
         .route("/import/file", post(transfer::upload).layer(DefaultBodyLimit::max(transfer::UPLOAD_LIMIT)))
         .route("/import/baikal", post(transfer::baikal))
@@ -92,6 +118,10 @@ fn embed(body: &'static [u8]) -> Asset {
 
 static CSS: LazyLock<Asset> = LazyLock::new(|| embed(include_bytes!("../../static/app.css")));
 static JS: LazyLock<Asset> = LazyLock::new(|| embed(include_bytes!("../../static/app.js")));
+/// EventCalendar 5.18.1, vendored (decision 26). sha256 in AGENTS.md.
+static EC_JS: LazyLock<Asset> = LazyLock::new(|| embed(include_bytes!("../../static/event-calendar.min.js")));
+static EC_CSS: LazyLock<Asset> = LazyLock::new(|| embed(include_bytes!("../../static/event-calendar.min.css")));
+static CAL_JS: LazyLock<Asset> = LazyLock::new(|| embed(include_bytes!("../../static/calendar.js")));
 /// htmx 2.0.4, vendored. sha256 in AGENTS.md.
 static HTMX: LazyLock<Asset> = LazyLock::new(|| embed(include_bytes!("../../static/htmx.min.js")));
 
@@ -217,17 +247,39 @@ impl IntoResponse for WebError {
 
 pub type Page = Result<Response, WebError>;
 
-/// What every signed-in page needs for the header.
+/// What every signed-in page needs for the header and `<html>`.
 pub struct Nav {
     pub label: String,
     pub admin: bool,
     pub dav: bool,
     pub active: &'static str,
+    /// `en` or `nl` (decision 35).
+    pub lang: &'static str,
+    /// `dark`, `light` or `system` (decision 36).
+    pub theme: &'static str,
+    pub t: &'static i18n::T,
+}
+
+/// A stored theme as one of the three values the CSS knows.
+pub fn theme(stored: &str) -> &'static str {
+    match stored {
+        "light" => "light",
+        "system" => "system",
+        _ => "dark",
+    }
 }
 
 impl Nav {
     pub fn new(st: &AppState, u: &WebUser, active: &'static str) -> Self {
-        Nav { label: u.account.label().to_string(), admin: u.account.is_admin, dav: st.dav, active }
+        Nav {
+            label: u.account.label().to_string(),
+            admin: u.account.is_admin,
+            dav: st.dav,
+            active,
+            lang: i18n::code(u.lang),
+            theme: theme(&u.account.theme),
+            t: i18n::t(u.lang),
+        }
     }
 
     /// `aria-current` for a section's link.

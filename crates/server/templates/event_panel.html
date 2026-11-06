@@ -1,0 +1,43 @@
+<div class="sheet" role="dialog" aria-modal="false" aria-labelledby="ev-heading">
+  <header class="sheet-header">
+    <h2 id="ev-heading">{% if new %}{{ t.new_event }}{% else if d.title.is_empty() %}{{ t.calendar }}{% else %}{{ d.title }}{% endif %}</h2>
+    <button type="button" class="quiet compact" data-cal="close">{{ t.close }}</button>
+  </header>
+  <p class="meta sheet-meta"><svg class="swatch" viewBox="0 0 1 1" aria-hidden="true"><rect width="1" height="1" fill="{{ d.color }}"/></svg> {% if new %}{{ t.calendar }}{% else %}{{ d.calendar }}{% if !d.own %} · {{ t.from_owner }} {{ d.owner }}{% endif %}{% endif %}</p>
+  {% if !d.editable %}<p class="notice">{{ t.read_only }}</p>{% endif %}
+  <form id="ev-form" class="form" data-new="{% if new %}1{% endif %}" data-collection="{{ d.collection }}" data-name="{{ d.name }}" data-etag="{{ d.etag }}" data-instance="{% if let Some(i) = d.instance %}{{ i }}{% endif %}" data-recurring="{% if d.recurring %}1{% endif %}" data-initial="{{ initial }}">
+    <fieldset class="sheet-fields"{% if !d.editable %} disabled{% endif %}>
+      <label class="field">{{ t.title }} <input type="text" name="title" value="{{ d.title }}" maxlength="500" required></label>
+      <label class="checkbox"><input type="checkbox" name="all_day" value="1"{% if d.all_day %} checked{% endif %}> {{ t.all_day }}</label>
+      <fieldset class="when"><legend>{{ t.starts }}</legend>
+        <div class="field-row"><input type="date" name="start_date" value="{{ d.start_date }}" aria-label="{{ t.starts }}: {{ t.date }}" required><input type="time" name="start_time" value="{{ d.start_time }}" aria-label="{{ t.starts }}: {{ t.time }}" data-timed{% if d.all_day %} hidden{% endif %}></div>
+      </fieldset>
+      <fieldset class="when"><legend>{{ t.ends }}</legend>
+        <div class="field-row"><input type="date" name="end_date" value="{{ d.end_date }}" aria-label="{{ t.ends }}: {{ t.date }}" required><input type="time" name="end_time" value="{{ d.end_time }}" aria-label="{{ t.ends }}: {{ t.time }}" data-timed{% if d.all_day %} hidden{% endif %}></div>
+      </fieldset>
+      <label class="field">{{ t.repeat }}
+        <select name="repeat">
+          {% if d.repeat == "custom" %}<option value="custom" selected>{{ t.repeat_custom }}</option>{% endif %}
+          <option value="none"{% if d.repeat == "none" %} selected{% endif %}>{{ t.repeat_none }}</option>
+          <option value="daily"{% if d.repeat == "daily" %} selected{% endif %}>{{ t.repeat_daily }}</option>
+          <option value="weekly"{% if d.repeat == "weekly" %} selected{% endif %}>{{ t.repeat_weekly }}</option>
+          <option value="monthly"{% if d.repeat == "monthly" %} selected{% endif %}>{{ t.repeat_monthly }}</option>
+          <option value="yearly"{% if d.repeat == "yearly" %} selected{% endif %}>{{ t.repeat_yearly }}</option>
+        </select></label>
+      {% if new %}<label class="field">{{ t.calendar }}
+        <select name="collection">{% for c in calendars %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>{% endif %}
+      <label class="field">{{ t.location }} <input type="text" name="location" value="{{ d.location }}" maxlength="500"></label>
+      <label class="field">{{ t.notes }} <textarea name="notes" rows="3" maxlength="5000">{{ d.description }}</textarea></label>
+      <label class="field">{{ t.reminders }} <span class="hint">{{ t.reminders_hint }}</span>
+        <select name="alarm">
+          {% if alarm_value == "keep" %}<option value="keep" selected>{{ t.repeat_custom }}</option>{% endif %}
+          <option value="none"{% if alarm_value == "none" %} selected{% endif %}>{{ t.reminder_none }}</option>
+          {% for (v, label) in alarms %}<option value="{{ v }}"{% if alarm_value == *v %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></label>
+    </fieldset>
+    {% if d.editable %}<div class="form-actions">
+      <button type="submit" class="primary">{{ t.save }}</button>
+      {% if !new %}<button type="button" class="danger" data-cal="delete">{{ t.delete }}</button>{% endif %}
+    </div>{% endif %}
+  </form>
+</div>

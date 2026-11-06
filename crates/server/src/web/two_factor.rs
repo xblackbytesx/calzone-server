@@ -14,7 +14,7 @@ use serde::Deserialize;
 
 use super::pages::{PER_ACCOUNT, PER_ADDRESS};
 use super::session::{self, PendingUser, SignedIn, WebUser};
-use super::{Nav, Page, WebError, html};
+use super::{Nav, Page, WebError, html, i18n};
 use crate::AppState;
 use crate::audit::{self, Reason, Service};
 use crate::client::ClientAddr;
@@ -35,10 +35,12 @@ fn now() -> i64 {
 #[template(path = "login_code.html")]
 struct CodePage {
     error: Option<&'static str>,
+    t: &'static i18n::T,
+    lang: &'static str,
 }
 
-pub async fn code_page(_: PendingUser) -> Page {
-    html(CodePage { error: None })
+pub async fn code_page(PendingUser(user): PendingUser) -> Page {
+    html(CodePage { error: None, t: i18n::t(user.lang), lang: i18n::code(user.lang) })
 }
 
 #[derive(Deserialize)]
@@ -58,8 +60,9 @@ pub async fn code(
     addr: ClientAddr,
     Form(f): Form<CodeForm>,
 ) -> Page {
+    let (tr, lang) = (i18n::t(user.lang), i18n::code(user.lang));
     let again = |error, status| -> Page {
-        let mut r = html(CodePage { error: Some(error) })?;
+        let mut r = html(CodePage { error: Some(error), t: tr, lang })?;
         *r.status_mut() = status;
         Ok(r)
     };
@@ -69,7 +72,7 @@ pub async fn code(
         // Too many tries: this pending session is spent; start over later.
         audit::auth_failure(Service::Code, Reason::Throttled, addr.0);
         accounts::end_session(&st.pool, &user.token).await?;
-        return again("Too many wrong codes. Wait 15 minutes and log in again.", StatusCode::TOO_MANY_REQUESTS);
+        return again(tr.code_too_many, StatusCode::TOO_MANY_REQUESTS);
     }
     match two_factor::check(&st.pool, key(&st)?, user.id(), &f.code, now()).await? {
         Some(how) => {
@@ -77,7 +80,7 @@ pub async fn code(
             let persistent = accounts::session_persistent(&st.pool, &user.token).await?;
             accounts::end_session(&st.pool, &user.token).await?;
             let token = accounts::create_session(&st.pool, user.id(), persistent).await?;
-            let to = if how == Accepted::RecoveryCode { "/settings?recovery=used" } else { "/collections" };
+            let to = if how == Accepted::RecoveryCode { "/settings?recovery=used" } else { "/calendar" };
             Ok(([(SET_COOKIE, session::session_cookie(&token, st.cookie_secure, persistent))], Redirect::to(to))
                 .into_response())
         }
@@ -85,7 +88,7 @@ pub async fn code(
             st.throttle.fail(&addr_key, t);
             st.throttle.fail(&acct_key, t);
             audit::auth_failure(Service::Code, Reason::Wrong, addr.0);
-            again("That code is not right, or was already used. Try the next one.", StatusCode::UNAUTHORIZED)
+            again(tr.code_wrong, StatusCode::UNAUTHORIZED)
         }
     }
 }

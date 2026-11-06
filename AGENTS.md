@@ -13,7 +13,7 @@ both repos.
 
 Record decisions here when they are made, with the date and the reason, and
 keep it true to the code: mark what is planned as planned. Never use em
-dashes. The phase 1 plan is `docs/plan-phase-1.md`.
+dashes. The phase 1 plan is `docs/plan-phase-1.md`; phase 2 is `docs/plan-phase-2.md`.
 
 ## Status
 
@@ -84,6 +84,19 @@ migration `0006_two_factor.sql`, `CALZONE_SECRET_KEY` now required), and
 and one `auth_failure` log line per refused sign-in with a CrowdSec parser
 and scenario in `deploy/crowdsec/` (decision 34). 134 workspace tests.
 
+Phase 2 started (2026-11-06): spike S2 decided (decision 26, EventCalendar
+for the grid); the plan is `docs/plan-phase-2.md`. Step 1 done the same
+day: core `moment`, `edit` (lossless, all three recurring scopes) and
+`quickadd` (English and Dutch); the household corpus passes every edit
+check. 153 workspace tests. Step 2 done the same day: the calendar API
+(decision 37), migration `0008_calendar_app.sql`. 159 workspace tests.
+Step 3 done the same day: the calendar page (decision 38), checked in
+headless Chromium against the real binary (drag, scope, undo, panel,
+delete, quick add, keys, phone, light, Dutch). 161 workspace tests.
+Step 4 done the same day: contacts (decision 39); all 1412 household cards
+edit losslessly; checked in Chromium with 1500 synthetic contacts. 171
+workspace tests.
+
 ## Architecture
 
 ```
@@ -113,11 +126,16 @@ address), `audit` (the `auth_failure` line), `throttle` (login failure budgets),
 `principals`, `collections`, `objects`: put, get, get_many, list, in_range,
 delete, changes_since; `app_passwords`: create, list, revoke, verify;
 `accounts`: passphrases, admins, sessions; `imports`: reports;
-`two_factor`: TOTP, recovery codes, secrets at rest), `import`
+`two_factor`: TOTP, recovery codes, secrets at rest; `prefs`: settings;
+`events`: occurrences, writes, undo; `contacts`: list, detail, writes,
+photos), `import`
 (`Run`: files and Takeout zips; `baikal`: the CalDAV/CardDAV reader;
 `digest`), `export` (zip, one collection), `dav` (`auth`: Basic; `props`:
 live properties; handlers), `web` (`session`, `pages`, `collections`,
-`passwords`, `admin`, `transfer`, `two_factor`; askama templates in `templates/`, assets in
+`passwords`, `admin`, `transfer`, `two_factor`, `api` (JSON for the
+calendar page), `calendar` (the page and the event panel), `contacts`,
+`i18n`
+(languages and every string); askama templates in `templates/`, assets in
 `static/`), `migrations/` (numbered SQL, embedded, run at every start).
 
 Dav modules: `xml` (namespaced tree, escaping), `path` (URL space, hrefs),
@@ -127,7 +145,10 @@ Dav modules: `xml` (namespaced tree, escaping), `path` (URL space, hrefs),
 Core modules: `lines` (Document, Component, Item, Line; fold), `object`
 (inspect_calendar, inspect_card, Bounds, unescape), `recur` (expand, When,
 Occurrence, Warning), `vtimezone` (VZone), `split` (split, merge,
-UserLayer), `import` (decode, split_calendar, split_cards, assemble). Per-user items: VALARM, `X-MOZ-LASTACK`, `X-MOZ-SNOOZE-TIME`
+UserLayer), `import` (decode, split_calendar, split_cards, assemble),
+`moment` (Moment, Key, VTIMEZONE generation), `edit` (EventChange, Scope,
+edit, delete, new_event), `quickadd` (parse, Lang), `card` (read, apply,
+new_card). Per-user items: VALARM, `X-MOZ-LASTACK`, `X-MOZ-SNOOZE-TIME`
 and `X-MOZ-SNOOZE-TIME-*`; `X-MOZ-GENERATION` stays shared.
 
 Pins follow wordwarz-server unless a decision here says otherwise: rust 1.92,
@@ -582,9 +603,135 @@ Settled 2026-11-06:
     `audit::tests`) and a scenario: more than 10 refusals in about 10
     minutes from one address. The line format is a contract: change the
     parser with it.
-26. **S2, grid component (open):** vkurko EventCalendar or our own Web
-    Component. Licence confirmed from the repo's LICENSE file before
-    adoption.
+26. **S2 result (2026-11-06): vkurko EventCalendar 5.18.1 for the grid.**
+    Measured in headless Chromium under our exact CSP, week view with
+    timed and all-day events, desktop and phone width:
+    - **EventCalendar:** no CSP violations (it styles through the CSSOM,
+      which `style-src 'self'` allows), events placed and sized right,
+      drag fires `eventDrop` at both widths. 133 KB minified, 44 KB
+      gzipped, no runtime dependencies in the build. Stable `ec-*` classes
+      and 30 `--ec-*` custom properties, so it takes our tokens (decision
+      13). MIT, confirmed from the repo's LICENSE (vkurko/calendar).
+    - **FullCalendar 7.1.4:** also works under the CSP and drags, but 185
+      KB gzipped, and its class names are hashed (`fc-classic-TZ4`), which
+      makes theming with our tokens impractical. Not chosen.
+    - **Our own component:** not needed now; it stays the fallback if
+      EventCalendar stops being maintained (single maintainer). The build
+      is vendored and pinned like HTMX: `static/event-calendar.min.js`
+      sha256 `31318d0a1b55fbfd9a8ef2009ca760f24f181a9b0a68edcf1d4ae0f93813a810`,
+      `static/event-calendar.min.css` sha256
+      `d01c61b02280d891f14a4fd9dfbcd708678b6fab4245b8503ad6ec304e44584c`.
+35. **English and Dutch (2026-11-06).** Every page and message exists in
+    both; English is the default. Each person picks theirs in Settings;
+    before login (and until they pick), the browser's `Accept-Language`
+    decides. Quick add understands both (decision 12). Strings live in one
+    place per language, never inline in handlers, so a page cannot ship
+    half translated.
+36. **Dark by default (2026-11-06).** The whole app, the grid included,
+    starts dark; each person can choose light or "follow the device" in
+    Settings. The grid is themed only through its `--ec-*` properties set
+    from our tokens (decision 13), so it always matches the page around it.
+37. **The calendar API (phase 2 step 2, 2026-11-06).**
+    - **JSON under `/api/`** for the calendar page:
+      - occurrences, events (create, update, delete with
+        `instance` + `scope`), undo, quick add, settings, calendars and
+        per-calendar prefs;
+      - the session cookie and the Origin guard as for pages; `ApiUser`
+        answers JSON 401/403 instead of redirecting;
+      - errors are `{"error": ...}`: 412 stale, 409 undo conflict, 404
+        nothing to undo.
+    - **Times:** the browser speaks viewer-local wall time (`2026-01-05`
+      or `2026-01-05T09:00`). The server keeps each event's own kind: a
+      floating event stays floating, UTC stays UTC, and a zoned event keeps
+      its zone, converted. New events take the viewer's zone, which is
+      their setting, else `CALZONE_DEFAULT_TIMEZONE`, else UTC.
+    - **Every web write is one transaction:** the lock, the `If-Match`
+      check against the ETag the browser saw, the core edit on the
+      viewer's own view (their reminders merged in), the store, and an
+      `object_history` row with the replaced body and every person's
+      layer.
+    - **The sequence advances within a transaction** (`Locked.sequence`),
+      so the two objects of a split get distinct change-log numbers.
+    - **Undo:** by the author only, within 30 days, once. It restores
+      bodies and every layer, and is refused when any touched object
+      changed since.
+    - **Splits keep other people's reminders:** their series-wide VALARMs
+      are copied to the new series (the editor's travel in the text);
+      reminders and snoozes for single occurrences stay with the old one.
+    - **Settings:** time zone, language (`NULL` follows the browser),
+      theme (`dark` by default), week start and 24-hour clock per person.
+      Per calendar and person: colour, name, hidden, order and default
+      reminder (applied to events that person creates).
+38. **The calendar page (phase 2 step 3, 2026-11-06).**
+    - **`/calendar` is home** (also after login and the code step). Our own
+      translated toolbar is wrapped around the EventCalendar grid:
+      - today, back and forward, and the title;
+      - agenda, day, week and month (phone default agenda, desk default
+        week);
+      - quick add, and "+".
+      The view and date live in the URL.
+    - **`static/calendar.js`** feeds the grid from `/api/occurrences`:
+      - a drag shows at once and snaps back if refused; a recurring event
+        first asks the three-way scope in a `<dialog>`;
+      - every write shows a toast with Undo for 10 seconds (no confirm
+        dialogs);
+      - keys `t`, `n`, arrows and `j`/`k`, `1`-`4`, `Esc`; swipe pages on
+        touch;
+      - on first use it sends the browser's time zone.
+      Titles are inserted as text, never HTML.
+    - **The event panel** is an HTML fragment (`/calendar/event`,
+      `/calendar/event/new`) shown as a side sheet, full screen on phones.
+      The script sends only the fields that changed. All-day events show
+      their last day and store the day after. Reminders are the viewer's
+      own.
+    - **"All of them" on one occurrence** treats a new start or end as a
+      move of that occurrence, so the series shifts by the same amount
+      (core `edit::rebase`); it never jumps to the occurrence's date.
+    - **Scripts load on every page:** `hx-boost` swaps only the body, so a
+      script in one page's head would never run after a boosted
+      navigation. The calendar starts on load or `htmx:afterSettle`, and
+      its document listeners act only on the live page.
+    - **Grid theming:** EventCalendar sets `color-scheme: light` on `.ec`,
+      which flips `light-dark()` tokens. Our unlayered `.cal .ec` rules set
+      `color-scheme: inherit`, map its `--ec-*` and grey scale to our
+      tokens, and set its polyfill pair from `data-theme`.
+    - **Translations:** `web::i18n::T`, one struct per language, also sent
+      to the script as JSON. Translated now: base, navigation, login, the
+      code step, the calendar page and panel. The older admin pages follow
+      in step 5.
+    - **Owners show as initials** of their display name on events in
+      calendars the viewer does not own.
+39. **Contacts (phase 2 step 4, 2026-11-06).**
+    - **Core `card`:** reads a vCard 3.0 or 4.0 into name, organisation,
+      phones, emails, addresses, birthday, note and photo, and applies a
+      change losslessly:
+      - only touched lines are rewritten; `REV` changes only when
+        something did;
+      - repeating fields keep every line whose type and value are still
+        wanted, byte for byte, and add new ones next to their kind;
+      - unknown properties, groups and photos stay;
+      - a field counts as changed only when the edit supplies a different
+        value (a stray space in a stored name is not a change);
+      - the shown name (FN) follows the names only when it was derived
+        from them; a contact is refused only when no shown name would
+        remain (cards with only a shown name stay editable);
+      - a birthday without a year is never lost by a save that leaves it
+        alone.
+      New cards are vCard 3.0, the version the door advertises.
+    - **Pages:** `/contacts` (live search through `hx-get`, letters, an
+      avatar or initials), one contact (tel:, mailto:, an OpenStreetMap
+      search link that opens outside), and the edit form.
+      - Plain forms with post-redirect-get; the parallel row fields carry
+        two spare phone rows and one spare email and address row, so no
+        script is needed.
+      - Saves and deletes go through the event history (conditional on the
+        ETag, undoable): a notice with Undo, never a confirm dialog. A stale
+        form lands on the latest version with a notice.
+    - **Emails are a text field with the email keyboard**, not `type=email`:
+      browsers reject addresses with non-ASCII letters, which would block
+      saving the whole contact.
+    - **Photos:** inline JPEG, PNG, GIF and WebP are served from
+      `/contacts/photo/...`; links in a card are never fetched.
 
 ## Roadmap
 

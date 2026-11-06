@@ -62,6 +62,10 @@ pub struct Occurrence {
     pub recurrence_id: Option<When>,
     /// Whether an override component (RECURRENCE-ID) supplied this instance.
     pub overridden: bool,
+    /// The SUMMARY and LOCATION of the component this instance came from (an
+    /// override can have its own), unescaped.
+    pub summary: Option<String>,
+    pub location: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,7 +160,9 @@ pub fn expand(
         }
         let hit = s < to && (en > from || (en == s && s >= from));
         if hit {
-            out.occurrences.push(Occurrence { start, end, recurrence_id, overridden });
+            let summary = text_of(comp, &ICalendarProperty::Summary);
+            let location = text_of(comp, &ICalendarProperty::Location);
+            out.occurrences.push(Occurrence { start, end, recurrence_id, overridden, summary, location });
         }
     }
     out.occurrences.sort_by_key(|o| o.start.instant(viewer));
@@ -178,6 +184,14 @@ fn without_sequence(doc: &Document) -> String {
         }
     }
     doc.to_string()
+}
+
+fn text_of(comp: &ICalendarComponent, name: &ICalendarProperty) -> Option<String> {
+    let entry = comp.entries.iter().find(|e| &e.name == name)?;
+    match entry.values.first() {
+        Some(ICalendarValue::Text(t)) => Some(t.clone()),
+        _ => None,
+    }
 }
 
 fn has(comp: &ICalendarComponent, name: &ICalendarProperty) -> bool {

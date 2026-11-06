@@ -1,6 +1,5 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 {% block title %}Recovery codes · CalZone{% endblock %}
-{% block nav %}{% include "nav.html" %}{% endblock %}
 {% block content %}
 <header class="page-header"><div><h1>{% if first %}Two-factor sign-in is on{% else %}New recovery codes{% endif %}</h1><p class="meta">Keep these somewhere safe, away from your phone: a password manager, or on paper. Each one lets you in once if your phone is lost. They are shown only now.</p></div></header>
 <section class="panel">

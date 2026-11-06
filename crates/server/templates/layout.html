@@ -1,0 +1,7 @@
+{#- Every signed-in page: the header, and <html> set from the person's
+    language and theme (decisions 35 and 36). -#}
+{% extends "base.html" %}
+{% block lang %}{{ nav.lang }}{% endblock %}
+{% block theme %}{{ nav.theme }}{% endblock %}
+{% block scheme %}{% if nav.theme == "light" %}light{% else if nav.theme == "system" %}light dark{% else %}dark{% endif %}{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}

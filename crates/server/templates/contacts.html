@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block title %}{{ nav.t.contacts_title }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ nav.t.contacts_title }}</h1></div>
+{% if can_add %}<div class="page-actions"><a class="button primary" href="/contacts/new">{{ nav.t.new_contact }}</a></div>{% endif %}</header>
+{% include "_notice.html" %}
+<form method="get" action="/contacts" role="search" class="contact-search">
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ nav.t.search_placeholder }}" aria-label="{{ nav.t.search }}" autocomplete="off"
+         hx-get="/contacts" hx-trigger="input changed delay:250ms, search" hx-target="#contact-list" hx-select="#contact-list" hx-swap="outerHTML" hx-push-url="true">
+</form>
+<div id="contact-list" class="contact-list">
+  {% if books.is_empty() %}<p class="empty">{{ nav.t.no_book }}</p>
+  {% else if total == 0 %}<p class="empty">{% if q.is_empty() %}{{ nav.t.no_contacts }}{% else %}{{ nav.t.no_matches }}{% endif %}</p>
+  {% else %}
+  {% for b in books %}{% if b.count > 0 %}
+  <section class="panel contact-book">
+    {% if books.len() > 1 %}<h2>{{ b.name }}{% if !b.own %} <span class="meta">· {{ nav.t.from_owner }} {{ b.owner }}</span>{% endif %}</h2>{% endif %}
+    {% for g in b.groups %}
+    <h3 class="contact-letter">{{ g.letter }}</h3>
+    <ul class="rows contact-rows">
+      {% for r in g.rows %}
+      <li><a class="contact-row" href="{{ r.href }}">{% let photo = r.photo.clone() %}{% let color = r.color %}{% let initials = r.initials.clone() %}{% let big = false %}{% include "_avatar.html" %}<span class="row-main"><span class="row-title">{{ r.display }}</span>{% if !r.sub.is_empty() %}<span class="meta">{{ r.sub }}</span>{% endif %}</span></a></li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  </section>
+  {% endif %}{% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -10,8 +10,11 @@ pub mod access;
 pub mod accounts;
 pub mod app_passwords;
 pub mod collections;
+pub mod contacts;
+pub mod events;
 pub mod imports;
 pub mod objects;
+pub mod prefs;
 pub mod principals;
 pub mod two_factor;
 

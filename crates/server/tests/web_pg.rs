@@ -132,12 +132,12 @@ async fn login_sessions_and_uniform_failures() {
     assert!(bodies[0].contains("Wrong name or passphrase."));
 
     let r = b.login("Anna", "anna passphrase").await;
-    assert_eq!((r.status, location(&r).as_str()), (StatusCode::SEE_OTHER, "/collections"));
+    assert_eq!((r.status, location(&r).as_str()), (StatusCode::SEE_OTHER, "/calendar"));
     let cookie = r.header("set-cookie").unwrap();
     assert!(cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict") && cookie.contains("Path=/"));
     assert!(!cookie.contains("Secure"), "the test state has CALZONE_COOKIE_SECURE off");
     assert_eq!(b.get("/collections").await.status, StatusCode::OK);
-    assert_eq!(location(&b.get("/").await), "/collections");
+    assert_eq!(location(&b.get("/").await), "/calendar");
 
     // Logout ends the session for real, not just the cookie.
     let token = b.cookie.clone().unwrap();
@@ -548,7 +548,7 @@ async fn two_factor_sign_in() {
     let mut other = Browser::new(&app);
     other.login("anna", "anna passphrase").await;
     let mut anna = Browser::new(&app);
-    assert_eq!(location(&anna.login("anna", "anna passphrase").await), "/collections");
+    assert_eq!(location(&anna.login("anna", "anna passphrase").await), "/calendar");
     assert_eq!(location(&anna.get("/collections").await), "/settings/two-factor");
     assert_eq!(location(&anna.get("/").await), "/settings/two-factor");
     let htmx = send(
@@ -577,7 +577,10 @@ async fn two_factor_sign_in() {
     assert_eq!(bob.get("/collections").await.status, StatusCode::OK);
 
     assert_eq!(anna.post("/settings/two-factor", &[("code", "000000")]).await.status, StatusCode::BAD_REQUEST);
-    let done = anna.post("/settings/two-factor", &[("code", &totp(&secret, 0))]).await;
+    // Kept, so "a code works once" is tested with this exact code, whatever
+    // 30-second step the clock has moved to since.
+    let enrol_code = totp(&secret, 0);
+    let done = anna.post("/settings/two-factor", &[("code", &enrol_code)]).await;
     assert_eq!(done.status, StatusCode::OK);
     let codes: Vec<String> =
         done.body.match_indices("<li><code>").map(|(i, _)| done.body[i + 10..i + 21].to_string()).collect();
@@ -593,10 +596,10 @@ async fn two_factor_sign_in() {
     assert!(r.header("set-cookie").unwrap().contains("Max-Age=600"));
     assert_eq!(location(&anna.get("/collections").await), "/login");
     assert_eq!(anna.get("/login/code").await.status, StatusCode::OK);
-    let reused = anna.post("/login/code", &[("code", &totp(&secret, 0))]).await;
+    let reused = anna.post("/login/code", &[("code", &enrol_code)]).await;
     assert_eq!(reused.status, StatusCode::UNAUTHORIZED, "a code works once");
     let ok = anna.post("/login/code", &[("code", &totp(&secret, 1))]).await;
-    assert_eq!(location(&ok), "/collections");
+    assert_eq!(location(&ok), "/calendar");
     assert_eq!(anna.get("/collections").await.status, StatusCode::OK);
 
     // A recovery code works once, upper case and spaces allowed.
@@ -637,7 +640,7 @@ async fn two_factor_sign_in() {
     let r = bob_opt.post(&format!("/admin/people/{anna_id}/two-factor-reset"), &[]).await;
     assert_eq!(location(&r), "/admin/people");
     assert_eq!(location(&a2.get("/settings").await), "/login", "a reset signs them out");
-    assert_eq!(location(&a2.login("anna", "anna passphrase").await), "/collections", "no code step any more");
+    assert_eq!(location(&a2.login("anna", "anna passphrase").await), "/calendar", "no code step any more");
     assert_eq!(location(&a2.get("/collections").await), "/settings/two-factor", "and set up again");
     let cli = calzone_server::cli::run(&db.pool, &["user", "two-factor-reset", "anna"]).await.unwrap();
     assert!(cli.contains("reset"));
@@ -656,7 +659,7 @@ async fn two_factor_sign_in() {
     assert_eq!(c2.post("/settings/two-factor", &[("code", &totp(&s, 0))]).await.status, StatusCode::OK);
     let off = c2.post("/settings/two-factor/off", &[("passphrase", "carol passphrase"), ("code", &totp(&s, 1))]).await;
     assert_eq!(location(&off), "/login");
-    assert_eq!(location(&c2.login("carol", "carol passphrase").await), "/collections", "off again");
+    assert_eq!(location(&c2.login("carol", "carol passphrase").await), "/calendar", "off again");
     db.drop().await;
 }
 

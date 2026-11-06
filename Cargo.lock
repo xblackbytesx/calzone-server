@@ -370,6 +370,7 @@ dependencies = [
  "calzone-core",
  "calzone-dav",
  "chrono",
+ "chrono-tz",
  "getrandom 0.3.4",
  "hmac",
  "http-body-util",

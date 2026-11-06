@@ -1,6 +1,5 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 {% block title %}Settings · CalZone{% endblock %}
-{% block nav %}{% include "nav.html" %}{% endblock %}
 {% block content %}
 <header class="page-header"><div><h1>Settings</h1><p class="meta">You sign in as <code>{{ name }}</code>.</p></div></header>
 {% if let Some(s) = saved %}<p class="notice ok" role="status">{{ s }}</p>{% endif %}

@@ -56,6 +56,10 @@ pub struct Account {
     pub has_passphrase: bool,
     /// Two-factor sign-in is set up (decision 32).
     pub has_totp: bool,
+    /// `dark`, `light` or `system` (decision 36).
+    pub theme: String,
+    /// `en` or `nl`; None follows the browser (decision 35).
+    pub language: Option<String>,
 }
 
 impl Account {
@@ -69,7 +73,7 @@ impl Account {
 }
 
 const ACCOUNT_COLUMNS: &str = "id, kind, name, display_name, disabled, is_admin, passphrase_hash IS NOT NULL AS has_passphrase, \
-     totp_secret IS NOT NULL AS has_totp";
+     totp_secret IS NOT NULL AS has_totp, theme, language";
 
 /// Every user and group, users first, by name.
 pub async fn list(pool: &PgPool) -> Result<Vec<Account>> {

@@ -11,6 +11,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use super::WebError;
 use crate::AppState;
 use crate::domain::accounts::{self, Account, SESSION_DAYS};
+use calzone_core::quickadd::Lang;
 
 pub const COOKIE_NAME: &str = "calzone_session";
 
@@ -55,6 +56,8 @@ fn token(parts: &Parts) -> Option<String> {
 pub struct WebUser {
     pub account: Account,
     pub token: String,
+    /// Their language: the setting, else the browser's (decision 35).
+    pub lang: Lang,
 }
 
 impl WebUser {
@@ -92,7 +95,10 @@ impl IntoResponse for ToLogin {
 async fn verified(parts: &Parts, st: &AppState) -> Result<WebUser, ToLogin> {
     let token = token(parts).ok_or_else(|| ToLogin::login(parts))?;
     match accounts::session_user(&st.pool, &token).await {
-        Ok(Some(account)) => Ok(WebUser { account, token }),
+        Ok(Some(account)) => {
+            let lang = super::i18n::lang(account.language.as_deref(), &parts.headers);
+            Ok(WebUser { account, token, lang })
+        }
         Ok(None) => Err(ToLogin::login(parts)),
         Err(e) => {
             tracing::error!(error = %e, "web: session lookup failed");
@@ -122,6 +128,24 @@ impl FromRequestParts<AppState> for WebUser {
     }
 }
 
+/// A signed-in user for the JSON API: a JSON 401 instead of a redirect,
+/// and 403 for someone who must set up two-factor first.
+pub struct ApiUser(pub WebUser);
+
+impl FromRequestParts<AppState> for ApiUser {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, st: &AppState) -> Result<Self, Self::Rejection> {
+        let json =
+            |status: StatusCode, msg: &str| (status, axum::Json(serde_json::json!({ "error": msg }))).into_response();
+        let u = verified(parts, st).await.map_err(|_| json(StatusCode::UNAUTHORIZED, "Signed out. Log in again."))?;
+        if u.must_enrol(st) {
+            return Err(json(StatusCode::FORBIDDEN, "Set up two-factor sign-in first."));
+        }
+        Ok(ApiUser(u))
+    }
+}
+
 /// Signed in, two-factor set up or not: the setup pages and logout.
 pub struct SignedIn(pub WebUser);
 
@@ -142,7 +166,10 @@ impl FromRequestParts<AppState> for PendingUser {
     async fn from_request_parts(parts: &mut Parts, st: &AppState) -> Result<Self, Self::Rejection> {
         let token = token(parts).ok_or_else(|| ToLogin::login(parts))?;
         match accounts::pending_user(&st.pool, &token).await {
-            Ok(Some(account)) => Ok(PendingUser(WebUser { account, token })),
+            Ok(Some(account)) => {
+                let lang = super::i18n::lang(account.language.as_deref(), &parts.headers);
+                Ok(PendingUser(WebUser { account, token, lang }))
+            }
             _ => Err(ToLogin::login(parts)),
         }
     }

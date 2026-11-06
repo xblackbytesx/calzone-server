@@ -27,8 +27,12 @@
 /* ---- Tokens ------------------------------------------------------------ */
 
 @layer tokens {
+  /* Dark unless the person chose otherwise (decision 36); light-dark()
+     below follows color-scheme. */
+  :root { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="system"] { color-scheme: light dark; }
   :root {
-    color-scheme: light dark;
 
     /* Colour roles. light-dark() keeps both themes in one place. */
     --canvas: light-dark(#f6f4ef, #131317);
@@ -369,11 +373,12 @@
     .facts dd { margin: 0; }
   }
 
-  /* Per-collection choices for a device password. */
   /* Two-factor: the QR code stays dark on white in both themes. */
   .qr { inline-size: min(100%, 15rem); padding: var(--space-2xs); background: #fff; border-radius: var(--radius-s); }
   .qr svg { display: block; inline-size: 100%; block-size: auto; }
   .codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--space-3xs); }
+
+  /* Per-collection choices for a device password. */
   .choices { display: grid; gap: var(--space-3xs); padding-inline-start: var(--space-m); }
   .choices .choice-name { flex: 1 1 12rem; font-weight: 400; }
   .choices select { flex: 0 1 12rem; }
@@ -385,4 +390,132 @@
   /* HTMX's own inline indicator styles are off; requests dim their button. */
   .htmx-request button[type=submit] { opacity: 0.6; }
   .visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* ---- Contacts (phase 2 step 4) ---- */
+  .avatar { flex: none; inline-size: 2.5rem; block-size: 2.5rem; border-radius: 50%; object-fit: cover; }
+  .avatar.big { inline-size: 4.5rem; block-size: 4.5rem; }
+  .contact-search input { inline-size: 100%; }
+  .contact-list { display: grid; gap: var(--space-s); }
+  .contact-book { gap: var(--space-2xs); }
+  .contact-letter { font-size: var(--step--1); color: var(--text-quiet); padding-block-start: var(--space-2xs); }
+  .contact-rows > li { padding: 0; }
+  .contact-row { display: flex; align-items: center; gap: var(--space-xs); inline-size: 100%; padding-block: var(--space-2xs); color: inherit; text-decoration: none; }
+  .contact-row:hover .row-title { text-decoration: underline; }
+  .contact-head { align-items: center; }
+  /* Beats the page header's own rule for its first child. */
+  .page-header > .contact-id { display: flex; align-items: center; gap: var(--space-s); min-inline-size: 0; }
+  .contact-email { overflow-wrap: anywhere; }
+  .contact-note { white-space: pre-wrap; }
+  /* Kind and number on one line, even on a phone. */
+  .contact-typed { flex-wrap: nowrap; }
+  .contact-typed > select { flex: 0 0 7.5rem; inline-size: 7.5rem; }
+  .contact-typed > input { flex: 1 1 auto; min-inline-size: 0; inline-size: auto; }
+  .contact-address { display: grid; gap: var(--space-2xs); border: 0; border-block-end: var(--hairline); padding: 0 0 var(--space-xs); margin: 0; min-inline-size: 0; }
+  .contact-address > select { justify-self: start; inline-size: auto; }
+  /* A notice with an Undo button beside it (decision 12). */
+  .notice-undo { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); flex-wrap: wrap; }
+
+  /* ---- The calendar page (phase 2 step 3) ---- */
+  /* Full width: the grid is the page. */
+  .page.calendar-page { max-inline-size: none; padding-block-end: var(--space-2xs); }
+  .cal { display: grid; gap: var(--space-2xs); grid-template-rows: auto auto 1fr auto; }
+  .cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); }
+  .cal-nav { display: flex; align-items: center; gap: var(--space-3xs); flex: 1 1 auto; min-inline-size: 0; }
+  .cal-title { font-size: var(--step-1); margin-inline-start: var(--space-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-views { display: flex; gap: 0; border: var(--hairline); border-radius: var(--radius-s); overflow: hidden; }
+  .cal-views button { border: 0; border-radius: 0; background: transparent; color: var(--text-quiet); }
+  .cal-views button[aria-pressed=true] { background: var(--accent-tint); color: var(--text); font-weight: 600; }
+  .cal-quick { flex: 1 1 14rem; display: flex; }
+  .cal-quick input { inline-size: 100%; }
+  .cal-grid { block-size: max(26rem, calc(100dvb - 13rem)); min-inline-size: 0; }
+  .cal-keys { display: none; }
+  @media (min-width: 64rem) { .cal-keys { display: block; } }
+  @media (max-width: 40rem) {
+    .cal-new-text { display: none; }
+    .cal-quick { order: 5; flex-basis: 100%; }
+    .cal-grid { block-size: max(24rem, calc(100dvb - 15rem)); }
+  }
+
+  /* What an event shows: time, title, and initials when someone else owns it. */
+  .cal-ev-time { font-size: 0.85em; opacity: 0.85; margin-inline-end: 0.3em; }
+  .cal-ev-title { font-weight: 600; }
+  .cal-ev-who {
+    display: inline-grid; place-items: center; align-self: flex-start; justify-self: start; margin-inline-start: 0.35em; padding-inline: 0.3em;
+    min-inline-size: 1.5em; block-size: 1.5em; border-radius: 999px; font-size: 0.75em; font-weight: 700;
+    background: color-mix(in oklab, currentColor 22%, transparent);
+  }
+
+  /* The event panel: a sheet at the side, full screen on a phone. */
+  .cal-panel {
+    position: fixed; inset-block: 0; inset-inline-end: 0; z-index: 20; inline-size: min(100vi, 28rem);
+    background: var(--surface); border-inline-start: var(--hairline); overflow-y: auto;
+    box-shadow: 0 0 2rem color-mix(in oklab, black 35%, transparent);
+  }
+  .sheet { display: grid; gap: var(--space-xs); padding: var(--panel-pad); }
+  .sheet-header { display: flex; align-items: start; justify-content: space-between; gap: var(--space-xs); }
+  .sheet-header h2 { overflow-wrap: anywhere; }
+  .sheet-meta { display: flex; align-items: center; gap: var(--space-2xs); }
+  .sheet-fields { display: grid; gap: var(--space-xs); border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+  .sheet .when { border: 0; padding: 0; margin: 0; }
+  .sheet .when legend { font-weight: 600; margin-block-end: var(--space-3xs); }
+  @media (max-width: 40rem) {
+    .cal-panel { inline-size: 100vi; border: 0; }
+    /* The page behind a full-screen sheet stays put. */
+    body.cal-panel-open { overflow: hidden; }
+  }
+
+  /* Which occurrences: a small modal with three plain choices. */
+  /* margin: auto centres a modal dialog; the reset's margin: 0 undid that. */
+  .cal-scope { margin: auto; border: var(--hairline); border-radius: var(--radius-m); background: var(--surface); color: var(--text); padding: var(--panel-pad); inline-size: min(92vi, 22rem); }
+  .cal-scope::backdrop { background: color-mix(in oklab, black 50%, transparent); }
+  .cal-scope .form > button { inline-size: 100%; }
+  .cal-scope-q { font-weight: 600; }
+
+  /* Saved, moved, deleted: with Undo (decision 12). */
+  .cal-toast {
+    position: fixed; z-index: 30; inset-block-end: var(--space-s); inset-inline-start: 50%; translate: -50% 0;
+    display: flex; align-items: center; gap: var(--space-xs); max-inline-size: min(92vi, 32rem);
+    padding: var(--space-2xs) var(--space-xs); border-radius: var(--radius-m);
+    background: var(--text); color: var(--canvas); box-shadow: 0 0.5rem 1.5rem color-mix(in oklab, black 30%, transparent);
+  }
+  .cal-toast button { background: transparent; color: inherit; border-color: color-mix(in oklab, currentColor 50%, transparent); }
+}
+
+/* The grid takes our tokens (decisions 13 and 36). Unlayered on purpose:
+   EventCalendar's own stylesheet is unlayered, and unlayered rules beat
+   every layer, so these sit at the same level with a stronger selector. */
+.cal .ec {
+  /* EventCalendar forces color-scheme: light on .ec, which would flip our
+     light-dark() tokens inside the grid; follow the page instead. */
+  color-scheme: inherit;
+  --ec-color-400: var(--text-quiet);
+  --ec-color-300: var(--line);
+  --ec-color-200: var(--surface-sunken);
+  --ec-color-100: var(--surface);
+  --ec-color-50: var(--canvas);
+  --ec-bg-color: var(--surface);
+  --ec-text-color: var(--text);
+  --ec-border-color: var(--line);
+  --ec-today-bg-color: var(--accent-tint);
+  --ec-highlight-color: color-mix(in oklab, var(--accent) 22%, transparent);
+  --ec-now-indicator-color: var(--danger);
+  --ec-popup-bg-color: var(--surface);
+  --ec-event-bg-color: var(--accent);
+  --ec-event-text-color: var(--on-accent);
+  --ec-bg-event-color: var(--text-quiet);
+  --ec-button-bg-color: var(--surface);
+  --ec-button-border-color: var(--line);
+  --ec-button-text-color: var(--text);
+  --ec-button-active-bg-color: var(--accent-tint);
+  --ec-button-active-border-color: var(--line);
+  --ec-button-active-text-color: var(--text);
+  border-radius: var(--radius-m);
+  font-size: var(--step--1);
+}
+.cal .ec .ec-event { border-radius: var(--radius-s); cursor: pointer; }
+/* Its own built-in shades switch on a polyfill pair; set it from our theme. */
+:root[data-theme="dark"] .cal .ec { --lightningcss-light: ; --lightningcss-dark: initial; }
+:root[data-theme="light"] .cal .ec { --lightningcss-light: initial; --lightningcss-dark: ; }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .cal .ec { --lightningcss-light: ; --lightningcss-dark: initial; }
 }

@@ -22,6 +22,9 @@ pub struct Config {
     pub secret_key: Option<[u8; 32]>,
     /// `CALZONE_TWO_FACTOR`: who must use two-factor sign-in.
     pub two_factor: TwoFactorPolicy,
+    /// `CALZONE_DEFAULT_TIMEZONE`: for people who have not set theirs yet
+    /// (the calendar page sends the browser's). Default UTC.
+    pub default_timezone: chrono_tz::Tz,
 }
 
 /// Who must sign in with a second factor (decision 32). Anyone may turn it
@@ -81,6 +84,12 @@ impl Config {
             behind_proxy: switch("CALZONE_BEHIND_PROXY", var("CALZONE_BEHIND_PROXY").as_deref(), false)?,
             secret_key: secret_key(var("CALZONE_SECRET_KEY").as_deref())?,
             two_factor: TwoFactorPolicy::parse(var("CALZONE_TWO_FACTOR").as_deref())?,
+            default_timezone: match var("CALZONE_DEFAULT_TIMEZONE") {
+                None => chrono_tz::UTC,
+                Some(v) => {
+                    v.parse().map_err(|_| anyhow::anyhow!("CALZONE_DEFAULT_TIMEZONE {v:?} is not an IANA zone"))?
+                }
+            },
         })
     }
 }

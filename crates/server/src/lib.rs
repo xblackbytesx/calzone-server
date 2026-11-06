@@ -42,6 +42,8 @@ pub struct AppState {
     pub secret_key: Option<domain::two_factor::SecretKey>,
     /// `CALZONE_TWO_FACTOR`.
     pub two_factor: config::TwoFactorPolicy,
+    /// `CALZONE_DEFAULT_TIMEZONE`.
+    pub default_timezone: chrono_tz::Tz,
 }
 
 impl AppState {
@@ -55,6 +57,7 @@ impl AppState {
             throttle: Arc::default(),
             secret_key: None,
             two_factor: config::TwoFactorPolicy::Admins,
+            default_timezone: chrono_tz::UTC,
         }
     }
 }

@@ -21,6 +21,7 @@ tower-http = { version = "0.7", features = ["compression-gzip", "trace"] }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate", "macros"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10"
 tracing = "0.1"
 getrandom = "0.3"
 sha2 = "0.10"

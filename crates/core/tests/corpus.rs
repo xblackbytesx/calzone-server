@@ -281,3 +281,222 @@ fn private_card_corpus() {
     eprintln!("private card corpus: cards={cards} with_uid={with_uid} with_fn={with_name}");
     assert!(cards > 0);
 }
+
+/// Every property line's exact source, in every component.
+fn line_sources(text: &str) -> Vec<String> {
+    fn walk(c: &Component, out: &mut Vec<String>) {
+        for item in &c.items {
+            match item {
+                Item::Property(l) => out.push(l.source()),
+                Item::Component(inner) => walk(inner, out),
+            }
+        }
+    }
+    let doc = Document::parse(text).unwrap_or_else(|_| panic!("an object does not parse"));
+    let mut out = Vec::new();
+    for c in &doc.components {
+        walk(c, &mut out);
+    }
+    out
+}
+
+/// How many of `before`'s lines (not named in `except`) are missing from
+/// `after`, counting duplicates.
+fn missing_lines(before: &str, after: &str, except: &[&str]) -> usize {
+    let mut pool = line_sources(after);
+    let mut missing = 0;
+    for s in line_sources(before) {
+        let name = calzone_core::lines::Line::from_source(&s).map(|l| l.name()).unwrap_or_default();
+        if except.contains(&name.as_str()) {
+            continue;
+        }
+        match pool.iter().position(|p| *p == s) {
+            Some(i) => {
+                pool.swap_remove(i);
+            }
+            None => missing += 1,
+        }
+    }
+    missing
+}
+
+fn occurrence_starts(text: &str, from: NaiveDateTime, to: NaiveDateTime) -> Vec<NaiveDateTime> {
+    let tz = chrono_tz::Europe::Amsterdam;
+    let mut v: Vec<NaiveDateTime> = recur::expand(text, from, to, tz)
+        .map(|e| e.occurrences.iter().map(|o| o.start.instant(tz)).collect())
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+/// Phase 2 step 1 exit check: edits over the household's events leave every
+/// line they do not touch byte for byte, and recurring edits neither lose
+/// nor double an occurrence. CONFIDENTIAL input: counts only.
+#[test]
+fn private_corpus_edits_are_lossless() {
+    use calzone_core::edit::{self, EventChange, Scope};
+    use calzone_core::moment::Key;
+
+    let files = private_files("ics");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.ics");
+        return;
+    }
+    let now = dt("2026-11-06 12:00");
+    let stamps = ["DTSTAMP", "LAST-MODIFIED"];
+    let (mut events, mut recurring, mut splits) = (0, 0, 0);
+    for f in files {
+        let text = std::fs::read_to_string(&f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        for (i, obj) in objects_from_export(&text).iter().enumerate() {
+            if !obj.contains("BEGIN:VEVENT") {
+                continue;
+            }
+            events += 1;
+            let noop = edit::edit(obj, None, Scope::All, &EventChange::default(), now, "n")
+                .unwrap_or_else(|e| panic!("event {i}: no-op edit refused: {e}"))
+                .updated
+                .unwrap();
+            assert_eq!(missing_lines(obj, &noop, &stamps), 0, "event {i}: a no-op edit changed a line");
+            assert_eq!(
+                line_sources(&noop).len(),
+                line_sources(obj).len() + stamp_additions(obj),
+                "event {i}: a no-op edit added lines"
+            );
+
+            let titled = edit::edit(
+                obj,
+                None,
+                Scope::All,
+                &EventChange { summary: Some("Renamed".into()), ..Default::default() },
+                now,
+                "n",
+            )
+            .unwrap_or_else(|e| panic!("event {i}: title edit refused: {e}"))
+            .updated
+            .unwrap();
+            assert_eq!(
+                missing_lines(obj, &titled, &["SUMMARY", "DTSTAMP", "LAST-MODIFIED"]),
+                0,
+                "event {i}: a title edit changed another line"
+            );
+            let (from, to) = (dt("2000-01-01 00:00"), dt("2030-01-01 00:00"));
+            let before = occurrence_starts(obj, from, to);
+            assert!(occurrence_starts(&titled, from, to) == before, "event {i}: a title edit moved occurrences");
+
+            // Recurring: the second occurrence, all three scopes.
+            if before.len() < 3 {
+                continue;
+            }
+            let tz = chrono_tz::Europe::Amsterdam;
+            let exp = recur::expand(obj, from, to, tz).unwrap();
+            let Some(rid) = exp.occurrences.iter().filter_map(|o| o.recurrence_id).nth(1) else { continue };
+            recurring += 1;
+            let key = match rid {
+                recur::When::Date(d) => Key::Date(d),
+                recur::When::Utc(t) | recur::When::Floating(t) => Key::Time(t),
+                recur::When::Zoned { local, .. } => Key::Time(local),
+            };
+            let change = EventChange { summary: Some("Only this".into()), ..Default::default() };
+            let this = edit::edit(obj, Some(key), Scope::This, &change, now, "n")
+                .unwrap_or_else(|e| panic!("event {i}: only-this edit refused: {e}"))
+                .updated
+                .unwrap();
+            assert_eq!(missing_lines(obj, &this, &[]), 0, "event {i}: only-this changed an existing line");
+            assert!(occurrence_starts(&this, from, to) == before, "event {i}: only-this moved occurrences");
+            let gone = edit::delete(obj, Some(key), Scope::This, now).unwrap().updated.unwrap();
+            assert_eq!(occurrence_starts(&gone, from, to).len(), before.len() - 1, "event {i}: delete-this");
+            let split = edit::edit(
+                obj,
+                Some(key),
+                Scope::Following,
+                &EventChange { summary: Some("From here".into()), ..Default::default() },
+                now,
+                "n2",
+            )
+            .unwrap_or_else(|e| panic!("event {i}: following edit refused: {e}"));
+            if let Some(new) = split.created {
+                splits += 1;
+                let mut both = occurrence_starts(&split.updated.unwrap(), from, to);
+                both.extend(occurrence_starts(&new, from, to));
+                both.sort();
+                assert!(
+                    both == before,
+                    "event {i}: a split lost or doubled occurrences ({} vs {})",
+                    both.len(),
+                    before.len()
+                );
+            }
+        }
+    }
+    eprintln!("household edits: events={events} recurring={recurring} splits={splits}");
+    assert!(events > 0);
+}
+
+/// Lines a no-op edit may add: DTSTAMP or LAST-MODIFIED where the master
+/// had none.
+fn stamp_additions(obj: &str) -> usize {
+    let doc = Document::parse(obj).unwrap();
+    let master = doc.components[0]
+        .components()
+        .find(|c| c.name == "VEVENT" && c.property("RECURRENCE-ID").is_none())
+        .or_else(|| doc.components[0].components().find(|c| c.name == "VEVENT"))
+        .unwrap();
+    ["DTSTAMP", "LAST-MODIFIED"].iter().filter(|n| master.property(n).is_none()).count()
+}
+
+/// Phase 2 step 4 check: every household card reads, a no-op edit and an
+/// edit that sends every current value back change nothing, and a note
+/// edit keeps every other line. CONFIDENTIAL input: counts only.
+#[test]
+fn private_corpus_card_edits_are_lossless() {
+    use calzone_core::card::{self, CardChange};
+
+    let files = private_files("vcf");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.vcf");
+        return;
+    }
+    let now = dt("2026-11-06 12:00");
+    let (mut cards, mut with_phone, mut with_photo) = (0, 0, 0);
+    for f in files {
+        let text = std::fs::read_to_string(&f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        let doc = Document::parse(&text).unwrap_or_else(|_| panic!("private vcf does not parse"));
+        for (i, c) in doc.components.iter().enumerate() {
+            let src = c.to_string();
+            cards += 1;
+            let v = card::read(&src).unwrap_or_else(|e| panic!("card {i}: does not read: {e}"));
+            with_phone += usize::from(!v.phones.is_empty());
+            with_photo += usize::from(v.photo.is_some());
+            assert!(
+                card::apply(&src, &CardChange::default(), now).unwrap() == src,
+                "card {i}: a no-op edit changed it"
+            );
+            let same = CardChange {
+                given: Some(v.given.clone()),
+                family: Some(v.family.clone()),
+                org: Some(v.org.clone()),
+                phones: Some(v.phones.clone()),
+                emails: Some(v.emails.clone()),
+                addresses: Some(v.addresses.clone()),
+                note: Some(v.note.clone()),
+                ..Default::default()
+            };
+            match card::apply(&src, &same, now) {
+                Ok(out) => assert!(out == src, "card {i}: sending its own values back changed it"),
+                Err(card::CardError::NoName) => {
+                    assert!(v.name.trim().is_empty(), "card {i}: refused although it has a name")
+                }
+                Err(e) => panic!("card {i}: {e}"),
+            }
+            if let Ok(out) = card::apply(&src, &CardChange { note: Some("Edited".into()), ..Default::default() }, now) {
+                assert_eq!(
+                    missing_lines(&src, &out, &["NOTE", "REV"]),
+                    0,
+                    "card {i}: a note edit changed another line"
+                );
+            }
+        }
+    }
+    eprintln!("household cards: {cards} edited losslessly ({with_phone} with phones, {with_photo} with photos)");
+    assert!(cards > 0);
+}

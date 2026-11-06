@@ -1,6 +1,5 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 {% block title %}Two-factor sign-in · CalZone{% endblock %}
-{% block nav %}{% include "nav.html" %}{% endblock %}
 {% block content %}
 <header class="page-header"><div><h1>Two-factor sign-in</h1><p class="meta">After your passphrase, CalZone will also ask for a code from an app on your phone. Someone who learns your passphrase still cannot get in.</p></div></header>
 {% if required %}<p class="notice warn" role="status">Your account needs two-factor sign-in on this server. Set it up to continue.</p>{% endif %}

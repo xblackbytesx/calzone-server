@@ -1,0 +1,1 @@
+{% if let Some(n) = notice %}<div class="notice {% if n.warn %}warn{% else %}ok{% endif %} notice-undo" role="status"><span>{{ n.text }}</span>{% if let Some(id) = n.undo %}<form method="post" action="/contacts/undo/{{ id }}"><button type="submit" class="compact">{{ nav.t.msg_undo }}</button></form>{% endif %}</div>{% endif %}

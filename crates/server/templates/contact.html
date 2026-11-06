@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block title %}{% if d.card.name.is_empty() %}{{ d.card.org }}{% else %}{{ d.card.name }}{% endif %} · CalZone{% endblock %}
+{% block content %}
+{% include "_notice.html" %}
+<header class="page-header contact-head"><div class="contact-id">
+  {% let big = true %}{% include "_avatar.html" %}
+  <div><h1>{% if d.card.name.is_empty() %}{{ d.card.org }}{% else %}{{ d.card.name }}{% endif %}</h1>
+  <p class="meta">{% if !d.card.org.is_empty() && !d.card.name.is_empty() %}{{ d.card.org }} · {% endif %}{{ d.book }}</p></div>
+</div>
+<div class="page-actions"><a class="button quiet" href="/contacts">{{ nav.t.contacts_title }}</a>{% if d.writable %}<a class="button" href="{{ href }}/edit">{{ nav.t.edit }}</a>{% endif %}</div></header>
+<div class="panels">
+  {% if !phones.is_empty() || !emails.is_empty() %}
+  <section class="panel">
+    <ul class="rows">
+      {% for p in phones %}<li><div class="row-main"><span class="row-title">{{ p.value }}</span><span class="meta">{{ p.kind }}</span></div><div class="row-actions"><a class="button compact" href="{{ p.link }}">{{ nav.t.call }}</a></div></li>{% endfor %}
+      {% for e in emails %}<li><div class="row-main"><span class="row-title contact-email">{{ e.value }}</span><span class="meta">{{ e.kind }}</span></div><div class="row-actions"><a class="button compact" href="{{ e.link }}">{{ nav.t.write_email }}</a></div></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  {% if !addresses.is_empty() %}
+  <section class="panel">
+    <h2>{{ nav.t.addresses }}</h2>
+    <ul class="rows">{% for a in addresses %}<li><div class="row-main"><span class="row-title">{{ a.text }}</span><span class="meta">{{ a.kind }}</span></div><div class="row-actions"><a class="button compact quiet" href="{{ a.map }}" rel="noopener noreferrer" target="_blank" hx-boost="false">{{ nav.t.show_map }}</a></div></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+  {% if birthday.is_some() || !d.card.note.is_empty() %}
+  <section class="panel">
+    <dl class="facts">
+      {% if let Some(b) = birthday %}<dt>{{ nav.t.birthday }}</dt><dd>{{ b }}</dd>{% endif %}
+      {% if !d.card.note.is_empty() %}<dt>{{ nav.t.notes }}</dt><dd class="contact-note">{{ d.card.note }}</dd>{% endif %}
+    </dl>
+  </section>
+  {% endif %}
+  {% if d.writable %}
+  <section class="panel">
+    <form method="post" action="{{ href }}/delete"><input type="hidden" name="etag" value="{{ d.etag }}"><button type="submit" class="danger">{{ nav.t.delete }}</button></form>
+  </section>
+  {% else %}<p class="hint">{{ nav.t.book_read_only }}</p>{% endif %}
+</div>
+{% endblock %}

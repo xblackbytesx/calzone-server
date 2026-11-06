@@ -6,11 +6,18 @@
 //! - [`recur`]: occurrences in a range, on calcard with decision 25's fixes.
 //! - [`vtimezone`]: offsets from a VTIMEZONE's own rules.
 //! - [`split`]: the per-user layer (reminders and their client state).
+//! - [`moment`], [`edit`]: times as properties write them; lossless event edits.
+//! - [`card`]: contacts read into their fields and edited losslessly.
+//! - [`quickadd`]: "dentist thu 3pm" / "tandarts do 15u" into a draft event.
 //! - [`import`]: `.ics`/`.vcf` files split into objects and assembled back.
 
+pub mod card;
+pub mod edit;
 pub mod import;
 pub mod lines;
+pub mod moment;
 pub mod object;
+pub mod quickadd;
 pub mod recur;
 pub mod split;
 pub mod vtimezone;

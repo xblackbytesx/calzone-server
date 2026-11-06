@@ -31,6 +31,7 @@ async fn main() -> Result<()> {
             let state = AppState {
                 secret_key: Some(secret_key),
                 two_factor: cfg.two_factor,
+                default_timezone: cfg.default_timezone,
                 dav: cfg.dav,
                 cookie_secure: cfg.cookie_secure,
                 public_url: cfg.public_url.clone(),

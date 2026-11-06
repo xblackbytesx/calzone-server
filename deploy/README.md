@@ -27,6 +27,7 @@ backups) and `CALZONE_PUBLIC_URL`.
 | `CALZONE_BEHIND_PROXY` | `on` behind Traefik: login throttling reads the client from `X-Forwarded-For` |
 | `CALZONE_SECRET_KEY` | required; encrypts two-factor secrets. Lost: everyone sets two-factor up again |
 | `CALZONE_TWO_FACTOR` | who must use two-factor sign-in: `everyone`, `admins` (default) or `optional` |
+| `CALZONE_DEFAULT_TIMEZONE` | IANA zone for people who have not set theirs (default `UTC`) |
 
 Create the database directory, owned by Postgres's container user:
 
@@ -112,11 +113,12 @@ cz export anna /path/anna.zip
 ## Backups and upgrades
 
 Everything CalZone keeps lives in Postgres under
-`$DOCKER_ROOT/calzone-server/database`. The privacybox rolling backup stops
+`$DOCKER_ROOT/calzone-server/database`. In privacybox (where the app is
+`apps/calzone`, data under `$DOCKER_ROOT/calzone`) the rolling backup stops
 the app, archives that tree and starts it again:
 
 ```
-./manage.sh --backup --app calzone-server
+./manage.sh --backup --app calzone
 ```
 
 Restore: `docker compose down`, put the archived `database` directory back,

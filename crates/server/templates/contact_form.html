@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+{% block title %}{{ title }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ title }}</h1></div><div class="page-actions"><a class="button quiet" href="{{ back }}">{{ nav.t.cancel }}</a></div></header>
+<form method="post" action="{{ action }}" class="panels contact-form">
+  <input type="hidden" name="etag" value="{{ etag }}">
+  <input type="hidden" name="birthday_was" value="{{ birthday }}">
+  <section class="panel form">
+    {% if new %}<label class="field">{{ nav.t.address_book }} <select name="book">{% for (id, name) in books %}<option value="{{ id }}">{{ name }}</option>{% endfor %}</select></label>{% endif %}
+    <div class="field-grid">
+      <label class="field">{{ nav.t.given_name }} <input type="text" name="given" value="{{ given }}" maxlength="200" autocomplete="off"></label>
+      <label class="field">{{ nav.t.family_name }} <input type="text" name="family" value="{{ family }}" maxlength="200" autocomplete="off"></label>
+    </div>
+    <label class="field">{{ nav.t.organisation }} <input type="text" name="org" value="{{ org }}" maxlength="200" autocomplete="off"></label>
+  </section>
+  <section class="panel form">
+    <h2>{{ nav.t.phones }}</h2>
+    {% for p in phones %}<div class="field-row contact-typed">
+      <select name="phone_kind" aria-label="{{ nav.t.kind_label }}">
+        <option value="mobile"{% if p.kind == "mobile" %} selected{% endif %}>{{ nav.t.kind_mobile }}</option>
+        <option value="home"{% if p.kind == "home" %} selected{% endif %}>{{ nav.t.kind_home }}</option>
+        <option value="work"{% if p.kind == "work" %} selected{% endif %}>{{ nav.t.kind_work }}</option>
+        <option value="other"{% if p.kind == "other" %} selected{% endif %}>{{ nav.t.kind_other }}</option>
+      </select>
+      <input type="tel" name="phone" value="{{ p.value }}" aria-label="{{ nav.t.phones }}" maxlength="100" autocomplete="off"></div>{% endfor %}
+    <h2>{{ nav.t.emails }}</h2>
+    {% for e in emails %}<div class="field-row contact-typed">
+      <select name="email_kind" aria-label="{{ nav.t.kind_label }}">
+        <option value="home"{% if e.kind == "home" || e.kind == "mobile" %} selected{% endif %}>{{ nav.t.kind_home }}</option>
+        <option value="work"{% if e.kind == "work" %} selected{% endif %}>{{ nav.t.kind_work }}</option>
+        <option value="other"{% if e.kind == "other" %} selected{% endif %}>{{ nav.t.kind_other }}</option>
+      </select>
+      {#- Text with the email keyboard, not type=email: browsers reject
+          addresses with non-ASCII letters, which would block saving. -#}
+      <input type="text" inputmode="email" name="email" value="{{ e.value }}" aria-label="{{ nav.t.emails }}" maxlength="200" autocomplete="off" autocapitalize="none" spellcheck="false"></div>{% endfor %}
+    <p class="hint">{{ nav.t.empty_rows_hint }}</p>
+  </section>
+  <section class="panel form">
+    <h2>{{ nav.t.addresses }}</h2>
+    {% for a in addresses %}<fieldset class="contact-address">
+      <select name="addr_kind" aria-label="{{ nav.t.kind_label }}">
+        <option value="home"{% if a.kind == "home" %} selected{% endif %}>{{ nav.t.kind_home }}</option>
+        <option value="work"{% if a.kind == "work" %} selected{% endif %}>{{ nav.t.kind_work }}</option>
+        <option value="other"{% if a.kind == "other" %} selected{% endif %}>{{ nav.t.kind_other }}</option>
+      </select>
+      <label class="field">{{ nav.t.street }} <input type="text" name="addr_street" value="{{ a.street }}" maxlength="300" autocomplete="off"></label>
+      <div class="field-grid">
+        <label class="field">{{ nav.t.postcode }} <input type="text" name="addr_postcode" value="{{ a.postcode }}" maxlength="40" autocomplete="off"></label>
+        <label class="field">{{ nav.t.city }} <input type="text" name="addr_city" value="{{ a.city }}" maxlength="200" autocomplete="off"></label>
+      </div>
+      <input type="hidden" name="addr_region" value="{{ a.region }}">
+      <label class="field">{{ nav.t.country }} <input type="text" name="addr_country" value="{{ a.country }}" maxlength="200" autocomplete="off"></label>
+    </fieldset>{% endfor %}
+  </section>
+  <section class="panel form">
+    <label class="field">{{ nav.t.birthday }} <input type="date" name="birthday" value="{{ birthday }}"></label>
+    <label class="field">{{ nav.t.notes }} <textarea name="note" rows="4" maxlength="5000">{{ note }}</textarea></label>
+    <div class="form-actions"><button type="submit" class="primary">{{ nav.t.save }}</button></div>
+  </section>
+</form>
+{% endblock %}
