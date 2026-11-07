@@ -40,7 +40,7 @@ pub fn content_type(meta: &ObjectMeta) -> String {
 }
 
 /// The privileges for an access level (RFC 3744). Write is content only;
-/// renaming and recolouring (`write-properties`) needs admin.
+/// renaming and recoloring (`write-properties`) needs admin.
 fn privileges(access: Access) -> String {
     let mut p = vec!["read", "read-current-user-privilege-set"];
     if access.can_write() {

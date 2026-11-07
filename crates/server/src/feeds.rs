@@ -202,7 +202,7 @@ pub async fn refresh(pool: &PgPool, sub: &Subscription, allow_private: bool) -> 
                         .await;
                         return Outcome::Updated(r);
                     }
-                    Err(crate::domain::DomainError::Invalid(why)) => Outcome::Failed(capitalised(&why)),
+                    Err(crate::domain::DomainError::Invalid(why)) => Outcome::Failed(capitalized(&why)),
                     Err(e) => {
                         tracing::warn!(collection = %sub.collection_id, error = %e, "feeds: replace failed");
                         Outcome::Failed("Something went wrong on the server; the last good copy is kept.".into())
@@ -217,7 +217,7 @@ pub async fn refresh(pool: &PgPool, sub: &Subscription, allow_private: bool) -> 
     outcome
 }
 
-fn capitalised(s: &str) -> String {
+fn capitalized(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str() + if s.ends_with('.') { "" } else { "." },

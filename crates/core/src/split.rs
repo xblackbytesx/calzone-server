@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::lines::{Component, Document, Item, Line};
 
 /// Properties that hold one user's view of an event (Thunderbird keeps alarm
-/// acknowledgement and snooze state on the event itself).
+/// acknowledgment and snooze state on the event itself).
 const PER_USER_PROPERTIES: [&str; 2] = ["X-MOZ-LASTACK", "X-MOZ-SNOOZE-TIME"];
 /// Thunderbird writes one per snoozed occurrence: `X-MOZ-SNOOZE-TIME-<time>`.
 const PER_USER_PREFIXES: [&str; 1] = ["X-MOZ-SNOOZE-TIME-"];

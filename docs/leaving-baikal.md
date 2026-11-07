@@ -31,7 +31,7 @@ cz import baikal anna https://baikal.privacy.box/dav.php/ anna
 
 CalZone only reads from Baikal. Each Baikal calendar and address book
 becomes one of the same name in that person's CalZone account, with its
-colour; reminders go to that person only.
+color; reminders go to that person only.
 
 Check the report:
 

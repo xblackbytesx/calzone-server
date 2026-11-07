@@ -18,7 +18,7 @@ use super::{Actor, Collection, CollectionKind, DomainError, Result, collections,
 pub struct ContactRow {
     pub collection: Uuid,
     pub name: String,
-    /// The name shown (FN), else the organisation, else an email.
+    /// The name shown (FN), else the organization, else an email.
     pub display: String,
     pub org: String,
     pub phone: Option<String>,
@@ -46,7 +46,7 @@ fn digits(s: &str) -> String {
 }
 
 /// Whether a card matches a search: any word of the query in its name,
-/// organisation, emails, notes, or (digits only) its phone numbers.
+/// organization, emails, notes, or (digits only) its phone numbers.
 fn matches(v: &CardView, q: &str) -> bool {
     let list = |xs: &[calzone_core::card::Typed]| xs.iter().map(|e| e.value.as_str()).collect::<Vec<_>>().join(" ");
     let hay =

@@ -179,7 +179,7 @@ pub async fn visible(pool: &PgPool, actor: Actor, kind: CollectionKind) -> Resul
     Ok(rows.into_iter().filter_map(from_row).collect())
 }
 
-/// Display name, description and colour (admin or owner).
+/// Display name, description and color (admin or owner).
 pub async fn update_properties(
     pool: &PgPool,
     actor: Actor,

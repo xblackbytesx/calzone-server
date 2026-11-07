@@ -154,7 +154,7 @@ pub struct CardView {
 pub enum CardError {
     #[error("not a contact")]
     NotACard,
-    #[error("a contact needs a name or an organisation")]
+    #[error("a contact needs a name or an organization")]
     NoName,
 }
 

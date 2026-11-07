@@ -2,9 +2,9 @@
 //! is the only place that expands recurrence).
 //!
 //! calcard does the RFC 5545 rule work (RRULE, RDATE, EXDATE, RECURRENCE-ID
-//! overrides, THISANDFUTURE). This wrapper corrects the three behaviours
+//! overrides, THISANDFUTURE). This wrapper corrects the three behaviors
 //! decision 25 lists:
-//! 1. Occurrences of a UTC (`Z`) recurring event come back labelled floating.
+//! 1. Occurrences of a UTC (`Z`) recurring event come back labeled floating.
 //!    Here every occurrence is read as a wall time and interpreted with the
 //!    kind of its own component's DTSTART, so UTC stays UTC.
 //! 2. calcard resolves a TZID only by name. Here an unresolved TZID is

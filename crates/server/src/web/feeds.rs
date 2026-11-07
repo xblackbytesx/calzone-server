@@ -162,14 +162,14 @@ pub async fn subscribe(
             // Nothing half made: the new calendar goes again.
             let _ = collections::delete(&st.pool, u.id(), c.id).await;
             match e {
-                DomainError::Invalid(why) => Err(fail(capitalised(&why))),
+                DomainError::Invalid(why) => Err(fail(capitalized(&why))),
                 other => Err(other.into()),
             }
         }
     }
 }
 
-fn capitalised(s: &str) -> String {
+fn capitalized(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str() + if s.ends_with('.') { "" } else { "." },

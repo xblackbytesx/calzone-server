@@ -11,7 +11,7 @@ Baikal.
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Docker image](https://img.shields.io/badge/ghcr.io-calzone--server-2496ED?logo=docker&logoColor=white)](https://github.com/xblackbytesx/calzone-server/pkgs/container/calzone-server)
 
-![The week view: calendars beside the grid, each in its own colour, with initials on events from someone else's calendar](docs/screenshots/week-dark.png)
+![The week view: calendars beside the grid, each in its own color, with initials on events from someone else's calendar](docs/screenshots/week-dark.png)
 
 <table>
   <tr>

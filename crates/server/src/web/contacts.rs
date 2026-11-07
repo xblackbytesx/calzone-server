@@ -41,7 +41,7 @@ fn href(collection: Uuid, name: &str) -> String {
 
 const PALETTE: [&str; 8] = ["#3a7bd5", "#c2185b", "#00897b", "#f4511e", "#7e57c2", "#43a047", "#8d6e63", "#1e88e5"];
 
-/// A stable colour for someone without a photo.
+/// A stable color for someone without a photo.
 fn color_for(name: &str) -> &'static str {
     let h = name.bytes().fold(5381u32, |h, b| h.wrapping_mul(33) ^ u32::from(b));
     PALETTE[(h % PALETTE.len() as u32) as usize]

@@ -77,7 +77,7 @@ pub(super) struct Locked {
 }
 
 /// Lock the collection row and check access. Every write goes through this,
-/// so writes to one collection are serialised and each takes its sequence
+/// so writes to one collection are serialized and each takes its sequence
 /// number inside the lock.
 pub(super) async fn lock(tx: &mut Transaction<'_, Postgres>, actor: Actor, collection: Uuid) -> Result<Locked> {
     let row: Option<(String, Vec<String>, i64, bool)> = sqlx::query_as(

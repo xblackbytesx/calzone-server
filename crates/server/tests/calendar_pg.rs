@@ -116,7 +116,7 @@ async fn occurrences_follow_each_persons_settings() {
     assert_eq!(e["id"].as_str().unwrap(), format!("{cal}/{name}/20260112T090000"));
     assert_eq!(anna.month().await[0]["own"].as_bool(), Some(true));
 
-    // Bob's own colour and name for Anna's calendar; Anna's view is unchanged.
+    // Bob's own color and name for Anna's calendar; Anna's view is unchanged.
     let prefs = json!({ "color": "#FF0000", "display_name": "Anna's", "default_alarm": 30 });
     assert_eq!(bob.post(&format!("/api/calendars/{cal}/prefs"), prefs).await.0, StatusCode::OK);
     let e = &bob.month().await[0];

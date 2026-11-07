@@ -1,4 +1,4 @@
-//! Calendars and address books: list, create, rename, recolour, share,
+//! Calendars and address books: list, create, rename, recolor, share,
 //! delete (with the name typed to confirm).
 
 use askama::Template;
@@ -256,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn colours() {
+    fn colors() {
         assert_eq!(valid_color("#AABBCC").as_deref(), Some("#aabbcc"));
         assert_eq!(valid_color("#abc"), None);
         assert_eq!(valid_color("javascript:x"), None);

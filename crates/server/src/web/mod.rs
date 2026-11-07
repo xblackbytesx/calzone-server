@@ -271,12 +271,12 @@ impl From<DomainError> for WebError {
                 StatusCode::BAD_REQUEST,
                 "Use 1 to 64 lowercase letters, digits, dots, dashes or underscores.".to_string(),
             ),
-            DomainError::Invalid(m) => (StatusCode::BAD_REQUEST, capitalise(&m)),
+            DomainError::Invalid(m) => (StatusCode::BAD_REQUEST, capitalize(&m)),
             DomainError::Db(e) => {
                 tracing::error!(error = %e, "web: database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong on the server.".to_string())
             }
-            other => (StatusCode::BAD_REQUEST, capitalise(&other.to_string())),
+            other => (StatusCode::BAD_REQUEST, capitalize(&other.to_string())),
         };
         let key = match status {
             StatusCode::NOT_FOUND => Some("not_found"),
@@ -290,7 +290,7 @@ impl From<DomainError> for WebError {
     }
 }
 
-fn capitalise(s: &str) -> String {
+fn capitalize(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str() + if s.ends_with('.') { "" } else { "." },
@@ -383,7 +383,7 @@ pub fn base_url(st: &AppState, headers: &HeaderMap) -> String {
     format!("{}://{host}", if st.cookie_secure { "https" } else { "http" })
 }
 
-/// A colour for `<input type="color">` (`#rrggbb`), from what clients store
+/// A color for `<input type="color">` (`#rrggbb`), from what clients store
 /// (`#rgb`, `#rrggbb`, `#rrggbbaa`).
 pub fn color_input(c: Option<&str>) -> String {
     let Some(c) = c.and_then(|c| c.strip_prefix('#')) else { return "#3a7bd5".into() };
@@ -405,7 +405,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn colours_for_the_picker() {
+    fn colors_for_the_picker() {
         assert_eq!(color_input(Some("#3366CCFF")), "#3366cc");
         assert_eq!(color_input(Some("#abc")), "#aabbcc");
         assert_eq!(color_input(Some("red")), "#3a7bd5");
@@ -439,7 +439,7 @@ mod tests {
 
     #[test]
     fn messages() {
-        assert_eq!(capitalise("a label of 1 to 100 characters"), "A label of 1 to 100 characters.");
+        assert_eq!(capitalize("a label of 1 to 100 characters"), "A label of 1 to 100 characters.");
         assert_eq!(escape("<a href=\"x\">'"), "&lt;a href=&quot;x&quot;&gt;&#39;");
     }
 }

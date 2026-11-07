@@ -13,7 +13,7 @@ both repos.
 
 Record decisions here when they are made, with the date and the reason, and
 keep it true to the code: mark what is planned as planned. Never use em
-dashes. The phase 1 plan is `docs/plan-phase-1.md`; phase 2 is `docs/plan-phase-2.md`.
+dashes. The phase 1 plan is `docs/plan-phase-1.md`; phase 2 is `docs/plan-phase-2.md`; phase 3 (drafted, not started) is `docs/plan-phase-3.md`.
 
 ## Status
 
@@ -233,7 +233,7 @@ Settled 2026-11-05/06 (do not reopen):
    carries grants from the first migration even where the UI for them comes
    later.
 8. **A per-user layer over shared data.** On a calendar someone else can
-   see, each user keeps their own colour, display name, visibility and
+   see, each user keeps their own color, display name, visibility and
    reminders. Alarms (VALARM) are always per user: they are taken out of the
    object when it is written and stored for the writing user, and the
    reading user's own alarms are put back when the object is served. My
@@ -257,7 +257,7 @@ Settled 2026-11-05/06 (do not reopen):
       Argon2 verification.
 11. **Web app: HTMX shell plus one grid island.** Pages, forms, the event
     panel, contacts, settings and sharing are HTMX (`hx-boost`, View
-    Transitions, preloading neighbouring ranges). The day/week/month time
+    Transitions, preloading neighboring ranges). The day/week/month time
     grid is a client-side component, because drag to move, drag to resize,
     drag to create and swiping must answer under the finger with no round
     trip. The grid gets expanded occurrences as JSON from the domain service,
@@ -269,7 +269,7 @@ Settled 2026-11-05/06 (do not reopen):
     Requirements: recurring edits always offer "only this one", "this and
     following" and "all"; quick add parses text like "dentist thu 3pm";
     keyboard shortcuts (`t` today, `n` new, arrows or `j`/`k` to page);
-    who owns an event is visible through colour and an avatar; undo after
+    who owns an event is visible through color and an avatar; undo after
     every move or delete instead of confirm dialogs. It does not ship until
     a non-technical household member has used it without help.
 13. **CSS: the shared semantic design system.** Same rules as wordwarz-server
@@ -372,10 +372,10 @@ Settled 2026-11-06:
     - **Dependency:** `calcard = "=0.3.14"`, `default-features = false` (no
       JMAP). Apache-2.0 OR MIT, pure Rust, builds on 1.92. Upstream stopped
       publishing on 2026-10-26, so if we need a fix we vendor this version
-      (the licence allows it) and never take code from the AGPL successor.
-    - **Our wrapper corrects four calcard behaviours, each pinned by a
+      (the license allows it) and never take code from the AGPL successor.
+    - **Our wrapper corrects four calcard behaviors, each pinned by a
       test (`crates/core/src/recur.rs`):**
-      - Occurrences of a UTC (`Z`) recurring event come back labelled
+      - Occurrences of a UTC (`Z`) recurring event come back labeled
         floating; relabel them UTC.
       - An unknown TZID is resolved only by name (`TZID`,
         `X-LIC-LOCATION`, MS CDO ids), never from the VTIMEZONE's rules;
@@ -394,7 +394,7 @@ Settled 2026-11-06:
       principal reaches nothing.
     - **Access** is the best of: owner, a direct grant, or a grant to a group
       the actor is in. Grants are `read`, `write` or `admin` (admin may
-      rename, recolour, share and delete). The owner cannot be granted.
+      rename, recolor, share and delete). The owner cannot be granted.
     - **Writes** lock the collection row (`FOR UPDATE`), check `If-Match` /
       `If-None-Match`, validate with the core, bump the collection
       sequence and append to `changes`, all in one transaction.
@@ -426,7 +426,7 @@ Settled 2026-11-06:
       on `/` answers as the root (python caldav and some clients start
       there); every other method on `/` belongs to the web app.
     - **App passwords:** 25 characters from a 32-letter alphabet (125 bits),
-      stored as SHA-256 of the normalised form (case, spaces and dashes
+      stored as SHA-256 of the normalized form (case, spaces and dashes
       ignored). Not Argon2: the secret is random, and DAV clients send it
       on every request. Optional scope: per-collection `read` or `write`,
       capping the user's own access; it is enforced at one place
@@ -442,7 +442,7 @@ Settled 2026-11-06:
       is the same string.
     - **Privileges:** read; write adds `write-content`, `bind`, `unbind`;
       admin adds `write` and `write-properties`; the owner also `all`.
-    - **Properties:** PROPPATCH sets display name, description and colour
+    - **Properties:** PROPPATCH sets display name, description and color
       only, all or nothing (403 plus 424). MKCALENDAR also takes the
       component set, and accepts and drops `calendar-timezone(-id)` and
       `calendar-order` (DAVx5 sends them; objects carry their own zones).
@@ -451,7 +451,7 @@ Settled 2026-11-06:
       (defined, not defined, text match). Anything else is `403
       supported-filter`. A time range uses the projection, then expands a
       recurring event in a closed range, widened by the floating margin.
-      `expand` in `calendar-data` is not honoured: objects are served
+      `expand` in `calendar-data` is not honored: objects are served
       whole.
     - **Depth:** a missing header is 0, infinity is refused
       (`propfind-finite-depth`). Limits: 10 MiB per object, 4 MiB per XML
@@ -478,7 +478,7 @@ Settled 2026-11-06:
       at once. Sessions are domain functions like everything else.
     - **Pages:** Calendars & contacts (the user's own and shared ones;
       create with a slug made from the name, numbered when taken; rename,
-      describe, recolour, share with a person or group as view, edit, or
+      describe, recolor, share with a person or group as view, edit, or
       edit and share; delete only with the name typed). Devices (app
       passwords, scoped per collection, shown once with the server address
       and user name; hidden when the DAV door is off). People (admins:
@@ -487,7 +487,7 @@ Settled 2026-11-06:
     - **Security:** the Converge guard: a cross-site `Origin` on any write
       is refused, CSP `default-src 'none'` with `self` scripts and styles,
       `nosniff`, `same-origin` referrers. No inline script or style; a
-      test reads every template. Calendar colours are SVG `fill`
+      test reads every template. Calendar colors are SVG `fill`
       attributes, which the CSP allows. Errors arrive as a flash fragment
       (HX-Retarget) or, without JavaScript, as a small page.
     - **HTMX:** `hx-boost` on the body and plain forms that redirect after
@@ -533,7 +533,7 @@ Settled 2026-11-06:
       followed by hand on the same host only; the password lives only for
       the run and is never stored or logged. Each remote collection maps to
       the account's own collection with the same slug and kind (made when
-      missing, with its name, description, colour and components);
+      missing, with its name, description, color and components);
       resource names are kept.
     - **Imports run in a background task**; the report page refreshes
       itself while running. One import at a time per account. Imports still
@@ -607,7 +607,7 @@ Settled 2026-11-06:
     WARN. Throttled refusals are logged too, so a guesser that keeps going
     past CalZone's own budget still fills CrowdSec's bucket. Never the name
     tried (people type passphrases into it) or any credential. The address
-    is the throttling one (`CALZONE_BEHIND_PROXY`). Logs carry no colour
+    is the throttling one (`CALZONE_BEHIND_PROXY`). Logs carry no color
     codes unless stdout is a terminal. `deploy/crowdsec/` holds the
     acquisition, a parser for exactly this line (pinned by
     `audit::tests`) and a scenario: more than 10 refusals in about 10
@@ -670,7 +670,7 @@ Settled 2026-11-06:
       reminders and snoozes for single occurrences stay with the old one.
     - **Settings:** time zone, language (`NULL` follows the browser),
       theme (`dark` by default), week start and 24-hour clock per person.
-      Per calendar and person: colour, name, hidden, order and default
+      Per calendar and person: color, name, hidden, order and default
       reminder (applied to events that person creates).
 38. **The calendar page (phase 2 step 3, 2026-11-06).**
     - **`/calendar` is home** (also after login and the code step). Our own
@@ -703,7 +703,7 @@ Settled 2026-11-06:
       its document listeners act only on the live page.
     - **Grid theming:** EventCalendar sets `color-scheme: light` on `.ec`,
       which flips `light-dark()` tokens. Our unlayered `.cal .ec` rules set
-      `color-scheme: inherit`, map its `--ec-*` and grey scale to our
+      `color-scheme: inherit`, map its `--ec-*` and gray scale to our
       tokens, and set its polyfill pair from `data-theme`.
     - **Translations:** `web::i18n::T`, one struct per language, also sent
       to the script as JSON. Translated at first: base, navigation, login,
@@ -712,7 +712,7 @@ Settled 2026-11-06:
     - **Owners show as initials** of their display name on events in
       calendars the viewer does not own.
 39. **Contacts (phase 2 step 4, 2026-11-06).**
-    - **Core `card`:** reads a vCard 3.0 or 4.0 into name, organisation,
+    - **Core `card`:** reads a vCard 3.0 or 4.0 into name, organization,
       phones, emails, addresses, birthday, note and photo, and applies a
       change losslessly:
       - only touched lines are rewritten; `REV` changes only when
@@ -757,7 +757,7 @@ Settled 2026-11-06:
     - **The calendar list:** beside the grid on a desk (folded away with
       the Calendars button, remembered per browser), above it on a phone.
       - A checkbox shows or hides a calendar.
-      - "⋯" opens the settings sheet: my name, my colour (stored only when
+      - "⋯" opens the settings sheet: my name, my color (stored only when
         actually picked, so you otherwise follow the calendar's own) and my
         default reminder.
       - When you may share it, the sheet also holds sharing, through the
@@ -790,7 +790,7 @@ Settled 2026-11-06:
       independent): events only, from shared bodies, so nobody's
       reminders. Busy-only keeps identity, times, recurrence and status,
       titles every entry "Busy" (in the language of whoever made the link,
-      since feed readers send none) and leaves out free and cancelled
+      since feed readers send none) and leaves out free and canceled
       events; overrides always stay, or the original occurrence would come
       back. A full feed publishes `CLASS:PRIVATE` or `CONFIDENTIAL` events
       busy-only. ETag `"<sequence>-<detail>"`, `Last-Modified`, 304,
@@ -803,7 +803,7 @@ Settled 2026-11-06:
     - **Read-only:** a subscribed calendar is a normal calendar with a
       `subscriptions` row; the object lock downgrades everyone to read
       (DAV privileges, the API and the panel follow). Its owner may still
-      rename, recolour, share and delete it, and everyone keeps their own
+      rename, recolor, share and delete it, and everyone keeps their own
       reminders on it.
     - **Refreshes** (a task every minute, ten due at a time, or "Refresh
       now") send `If-None-Match` / `If-Modified-Since`, and replace the
@@ -833,9 +833,9 @@ Settled 2026-11-06:
       binary with a made-up household; plus console, CSP and overflow
       checks and a keyboard walk. Result: no findings. Rerun it after UI
       changes; the household's real data never goes into screenshots.
-    - **Event colours:** text on an event is pure black or white,
-      whichever contrasts more with the calendar colour. With pure black
-      and white every colour reaches 4.5:1 (the worst case is about 4.58);
+    - **Event colors:** text on an event is pure black or white,
+      whichever contrasts more with the calendar color. With pure black
+      and white every color reaches 4.5:1 (the worst case is about 4.58);
       with near-black some cannot. The time is not faded, and the owner's
       initials are a ring, not a tinted fill.
     - **The grid for screen readers:** EventCalendar labels its layout as
@@ -883,7 +883,7 @@ Settled 2026-11-06:
   one calendar at its detail level, and a revoked or unknown token is `404`.
 - **Subscribed feeds keep the last good copy:** a failed, partial or empty
   refresh never replaces stored events.
-- **Conditional writes are honoured:** `If-Match` / `If-None-Match` are
+- **Conditional writes are honored:** `If-Match` / `If-None-Match` are
   checked under a row lock; a stale write is refused, never merged silently
   by the DAV door.
 - Strict CSP, no inline script or style; browser writes need a same-origin

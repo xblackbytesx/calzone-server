@@ -56,7 +56,7 @@ properties or vCard 3.0, so Step 2 adds public or synthetic fixtures for
 each of those.
 
 **S2, grid component (timebox 1 day).** Confirm vkurko EventCalendar's
-licence from its LICENSE file. Then build a throwaway page with week view,
+license from its LICENSE file. Then build a throwaway page with week view,
 drag, resize, drag to create and touch, styled with our tokens under the
 strict CSP (no inline style). Pass means it feels instant, works on a phone
 browser and needs no CSP exception; failing any of these points to our own
@@ -107,7 +107,7 @@ text; the importer (step 6) must decide how to handle such bytes.
 Tables:
 - `principals` (users and groups), `memberships`.
 - `credentials`: passphrases, app passwords with scopes.
-- `collections` (owner, kind, display name, colour, sequence).
+- `collections` (owner, kind, display name, color, sequence).
 - `grants` (principal, collection, level).
 - `objects` (collection, UID, name, raw text, projection, revision).
 - `user_layers` (user, object, data).
@@ -143,7 +143,7 @@ Implement what DAVx5 and Thunderbird actually use:
   `addressbook-multiget`, `addressbook-query`.
 - **Writes:** `GET`, `PUT` with `If-Match` / `If-None-Match` under the row
   lock, `DELETE`, `MKCALENDAR`, extended `MKCOL` for address books, and
-  `PROPPATCH` for display name and colour.
+  `PROPPATCH` for display name and color.
 - **Auth:** HTTP Basic with app passwords, with per-IP failure throttling.
 
 The door is off when `CALZONE_DAV=off`, and the test suite runs once in each
@@ -151,7 +151,7 @@ mode.
 
 Testing:
 - Integration tests replay request sequences captured from DAVx5 and
-  Thunderbird (Step 0 corpus), anonymised, as golden fixtures.
+  Thunderbird (Step 0 corpus), anonymized, as golden fixtures.
 - A python `caldav` client run in CI is a second, independent client.
 - **Device matrix, run by the owner:**
   - Add the account in DAVx5.
@@ -185,7 +185,7 @@ so the device matrix can run before step 5, and PROPFIND on `/`.
 ## Step 5: admin web pages
 
 Login (Argon2id, uniform failures), users (admin creates and disables),
-app passwords per scope, collections (create, rename, colour, delete with a
+app passwords per scope, collections (create, rename, color, delete with a
 typed confirmation), import, export. Semantic CSS layers from Converge and
 WordWarZ, strict CSP. Plain HTMX pages only.
 
@@ -203,7 +203,7 @@ WordWarZ, strict CSP. Plain HTMX pages only.
 - Headless Chromium over every page at 390 and 1280 px, light and dark: no
   CSP violations, no script errors, no horizontal overflow; the error
   flash shows on a refused form. Two layout fixes came from the
-  screenshots (the typed-delete label, the colour picker width).
+  screenshots (the typed-delete label, the color picker width).
 
 Added beyond the plan: groups and their members on the People page,
 `user passphrase` and `user admin` CLI commands for the first admin.

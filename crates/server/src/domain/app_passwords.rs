@@ -64,12 +64,12 @@ pub fn generate() -> String {
 }
 
 /// Case, spaces and dashes do not matter, so a retyped password works.
-fn normalise(password: &str) -> String {
+fn normalize(password: &str) -> String {
     password.chars().filter(|c| !c.is_whitespace() && *c != '-').flat_map(char::to_lowercase).collect()
 }
 
 fn hash(password: &str) -> String {
-    let digest = Sha256::digest(normalise(password).as_bytes());
+    let digest = Sha256::digest(normalize(password).as_bytes());
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -190,7 +190,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn passwords_look_right_and_normalise() {
+    fn passwords_look_right_and_normalize() {
         let p = generate();
         assert_eq!(p.len(), 29);
         assert_eq!(p.matches('-').count(), 4);

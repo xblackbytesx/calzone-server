@@ -109,7 +109,7 @@ async fn verified(parts: &Parts, st: &AppState) -> Result<WebUser, ToLogin> {
 
 impl WebUser {
     /// Whether this person must set up two-factor before using the app.
-    pub fn must_enrol(&self, st: &AppState) -> bool {
+    pub fn must_enroll(&self, st: &AppState) -> bool {
         !self.account.has_totp && st.two_factor.required_for(self.account.is_admin)
     }
 }
@@ -121,7 +121,7 @@ impl FromRequestParts<AppState> for WebUser {
 
     async fn from_request_parts(parts: &mut Parts, st: &AppState) -> Result<Self, Self::Rejection> {
         let u = verified(parts, st).await?;
-        if u.must_enrol(st) {
+        if u.must_enroll(st) {
             return Err(ToLogin { htmx: parts.headers.contains_key("hx-request"), to: "/settings/two-factor" });
         }
         Ok(u)
@@ -139,7 +139,7 @@ impl FromRequestParts<AppState> for ApiUser {
         let json =
             |status: StatusCode, msg: &str| (status, axum::Json(serde_json::json!({ "error": msg }))).into_response();
         let u = verified(parts, st).await.map_err(|_| json(StatusCode::UNAUTHORIZED, "Signed out. Log in again."))?;
-        if u.must_enrol(st) {
+        if u.must_enroll(st) {
             return Err(json(StatusCode::FORBIDDEN, "Set up two-factor sign-in first."));
         }
         Ok(ApiUser(u))

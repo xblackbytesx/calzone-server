@@ -102,7 +102,7 @@ impl Config {
     }
 }
 
-/// `on`/`off` style switches. Anything unrecognised is an error, not a
+/// `on`/`off` style switches. Anything unrecognized is an error, not a
 /// guess: a typo must not silently turn a door on or off.
 pub fn switch(name: &str, v: Option<&str>, default: bool) -> Result<bool> {
     match v.map(str::to_ascii_lowercase).as_deref() {

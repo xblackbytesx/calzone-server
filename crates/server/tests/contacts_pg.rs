@@ -206,12 +206,12 @@ async fn shared_read_only_and_dutch() {
     let list = bob.get("/contacts").await.body;
     assert!(list.contains("Contacten") && !list.contains("href=\"/contacts/new\""), "nothing he can add to");
     assert_eq!(bob.get("/contacts/new").await.status, StatusCode::BAD_REQUEST);
-    // A contact needs a name or an organisation.
+    // A contact needs a name or an organization.
     let bs = b.to_string();
     let mut f = fields(&bs, "", "+44 2");
     f[4] = ("family", "");
     let r = anna.post("/contacts/new", &f).await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
-    assert!(r.body.contains("Give a name or an organisation."));
+    assert!(r.body.contains("Give a name or an organization."));
     db.drop().await;
 }

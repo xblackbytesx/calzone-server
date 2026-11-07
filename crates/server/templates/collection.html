@@ -12,7 +12,7 @@
     <form method="post" action="/collections/{{ c.id }}" class="form">
       <label class="field">{{ nav.t.name }} <input type="text" name="name" value="{{ name }}" maxlength="100" required></label>
       <label class="field">{{ nav.a.description }} <textarea name="description" rows="2" maxlength="1000">{{ c.description }}</textarea></label>
-      {% if calendar %}<label class="field">{{ nav.a.colour }} <input type="color" name="color" value="{{ color }}"></label>{% endif %}
+      {% if calendar %}<label class="field">{{ nav.a.color }} <input type="color" name="color" value="{{ color }}"></label>{% endif %}
       <button type="submit" class="primary">{{ nav.t.save }}</button>
     </form>
   </section>

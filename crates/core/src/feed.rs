@@ -4,7 +4,7 @@
 //!
 //! - **Busy-only** keeps when an event blocks time and nothing else: the
 //!   times, recurrence and identity lines. Events marked free
-//!   (`TRANSP:TRANSPARENT`) and cancelled ones are left out, and tasks and
+//!   (`TRANSP:TRANSPARENT`) and canceled ones are left out, and tasks and
 //!   journal entries are never published.
 //! - **Full** publishes events as they are, except that an event marked
 //!   `CLASS:PRIVATE` or `CLASS:CONFIDENTIAL` is published as busy-only.
@@ -40,8 +40,8 @@ fn is_private(c: &Component) -> bool {
 
 fn blocks_time(c: &Component) -> bool {
     let transparent = c.property("TRANSP").is_some_and(|l| l.value().trim().eq_ignore_ascii_case("TRANSPARENT"));
-    let cancelled = c.property("STATUS").is_some_and(|l| l.value().trim().eq_ignore_ascii_case("CANCELLED"));
-    !transparent && !cancelled
+    let canceled = c.property("STATUS").is_some_and(|l| l.value().trim().eq_ignore_ascii_case("CANCELLED"));
+    !transparent && !canceled
 }
 
 /// One event component as busy-only: identity and times, and a plain title.
@@ -144,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn free_cancelled_tasks_and_layers_stay_out() {
+    fn free_canceled_tasks_and_layers_stay_out() {
         assert_eq!(object_for_feed(&event("TRANSP:TRANSPARENT\r\n"), Detail::Busy, "Busy"), None);
         assert_eq!(object_for_feed(&event("STATUS:CANCELLED\r\n"), Detail::Busy, "Busy"), None);
         assert!(object_for_feed(&event("TRANSP:TRANSPARENT\r\n"), Detail::Full, "Busy").is_some(), "full shows it");

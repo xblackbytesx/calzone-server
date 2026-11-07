@@ -66,7 +66,7 @@ The last command prints a temporary passphrase once. Log in at
 authenticator app; keep the recovery codes), change the passphrase under
 Settings, then do the rest in
 the browser: People (add the household; each gets a temporary passphrase to
-hand over), Calendars & contacts (create, colour, share with a person or a
+hand over), Calendars & contacts (create, color, share with a person or a
 group), and Devices (one password per phone or app, optionally limited to
 some calendars).
 

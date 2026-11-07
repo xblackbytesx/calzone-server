@@ -27,7 +27,7 @@ use super::objects::{self, Precondition, delete_in, lock, prepare, served_body, 
 use super::prefs::{self, CalendarPrefs};
 use super::{Actor, DomainError, Result};
 
-/// The default colour for a calendar that has none.
+/// The default color for a calendar that has none.
 pub const DEFAULT_COLOR: &str = "#3a7bd5";
 const HISTORY_DAYS: i32 = 30;
 

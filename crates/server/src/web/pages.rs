@@ -24,7 +24,7 @@ pub(super) const PER_ACCOUNT: u32 = 5;
 
 pub async fn home(State(st): State<AppState>, user: Option<SignedIn>) -> Redirect {
     Redirect::to(match user {
-        Some(SignedIn(u)) if u.must_enrol(&st) => "/settings/two-factor",
+        Some(SignedIn(u)) if u.must_enroll(&st) => "/settings/two-factor",
         Some(_) => "/calendar",
         None => "/login",
     })

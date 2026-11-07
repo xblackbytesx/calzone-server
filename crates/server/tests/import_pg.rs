@@ -235,7 +235,7 @@ async fn exports_give_back_what_went_in() {
     db.drop().await;
 }
 
-/// A source account on a real server: a calendar with colour and
+/// A source account on a real server: a calendar with color and
 /// components, events with an alarm and an override, and cards (one with a
 /// space in its resource name). Returns (source id, app password).
 async fn source_account(db: &Db) -> (Uuid, String) {

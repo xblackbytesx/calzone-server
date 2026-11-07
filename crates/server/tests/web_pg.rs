@@ -579,8 +579,8 @@ async fn two_factor_sign_in() {
     assert_eq!(anna.post("/settings/two-factor", &[("code", "000000")]).await.status, StatusCode::BAD_REQUEST);
     // Kept, so "a code works once" is tested with this exact code, whatever
     // 30-second step the clock has moved to since.
-    let enrol_code = totp(&secret, 0);
-    let done = anna.post("/settings/two-factor", &[("code", &enrol_code)]).await;
+    let enroll_code = totp(&secret, 0);
+    let done = anna.post("/settings/two-factor", &[("code", &enroll_code)]).await;
     assert_eq!(done.status, StatusCode::OK);
     let codes: Vec<String> =
         done.body.match_indices("<li><code>").map(|(i, _)| done.body[i + 10..i + 21].to_string()).collect();
@@ -596,7 +596,7 @@ async fn two_factor_sign_in() {
     assert!(r.header("set-cookie").unwrap().contains("Max-Age=600"));
     assert_eq!(location(&anna.get("/collections").await), "/login");
     assert_eq!(anna.get("/login/code").await.status, StatusCode::OK);
-    let reused = anna.post("/login/code", &[("code", &enrol_code)]).await;
+    let reused = anna.post("/login/code", &[("code", &enroll_code)]).await;
     assert_eq!(reused.status, StatusCode::UNAUTHORIZED, "a code works once");
     let ok = anna.post("/login/code", &[("code", &totp(&secret, 1))]).await;
     assert_eq!(location(&ok), "/calendar");

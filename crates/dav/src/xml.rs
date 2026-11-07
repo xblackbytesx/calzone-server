@@ -175,7 +175,7 @@ fn close(stack: &mut [Element], root: &mut Option<Element>, el: Element) {
 }
 
 /// Escape text for element content and attribute values. Carriage returns
-/// become `&#13;` so iCalendar's CRLF survives XML newline normalisation.
+/// become `&#13;` so iCalendar's CRLF survives XML newline normalization.
 pub fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 16);
     for c in s.chars() {

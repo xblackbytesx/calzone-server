@@ -18,7 +18,7 @@ impl Access {
         self >= Access::Write
     }
 
-    /// Rename, recolour, share or delete the collection.
+    /// Rename, recolor, share or delete the collection.
     pub fn can_admin(self) -> bool {
         self >= Access::Admin
     }

@@ -113,7 +113,7 @@ pub async fn setup(State(st): State<AppState>, SignedIn(user): SignedIn) -> Page
     let grouped: Vec<String> = b32.as_bytes().chunks(4).map(|c| String::from_utf8_lossy(c).into_owned()).collect();
     html(SetupPage {
         nav: Nav::new(&st, &user, "settings"),
-        required: user.must_enrol(&st),
+        required: user.must_enroll(&st),
         qr: two_factor::qr_svg(&two_factor::otpauth_uri(&user.account.name, &secret)),
         secret: grouped.join(" "),
     })

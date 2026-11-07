@@ -34,7 +34,7 @@
   :root[data-theme="system"] { color-scheme: light dark; }
   :root {
 
-    /* Colour roles. light-dark() keeps both themes in one place. */
+    /* Color roles. light-dark() keeps both themes in one place. */
     --canvas: light-dark(#f6f4ef, #131317);
     --surface: light-dark(#ffffff, #1c1c22);
     --surface-sunken: light-dark(#efece5, #24242c);
@@ -78,7 +78,7 @@
     --hairline: 1px solid var(--line);
     --tap: 2.75rem;
     --focus: 2px solid var(--accent);
-    /* Admin pages are forms and lists: a centred, comfortable width. */
+    /* Admin pages are forms and lists: a centered, comfortable width. */
     --page: 72rem;
     --measure: 65ch;
   }
@@ -99,7 +99,7 @@
   p { max-inline-size: var(--measure); }
   a { color: var(--accent); text-underline-offset: 0.15em; }
   a:not(:hover) { text-decoration: none; }
-  /* A link inside a sentence must not rely on colour alone (WCAG 1.4.1). */
+  /* A link inside a sentence must not rely on color alone (WCAG 1.4.1). */
   :where(p, .hint, .notice, td) a:not(.button) { text-decoration: underline; }
   :focus-visible { outline: var(--focus); outline-offset: 2px; }
   /* Off screen until a keyboard reaches it. */
@@ -124,7 +124,7 @@
   }
   input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offset: -1px; border-color: transparent; }
   input:disabled { color: var(--text-quiet); }
-  /* A colour is picked, not read: a swatch-sized control. */
+  /* A color is picked, not read: a swatch-sized control. */
   input[type=color] { inline-size: 5rem; padding: var(--space-3xs); cursor: pointer; }
   input[type=checkbox], input[type=radio] { inline-size: 1.15em; block-size: 1.15em; accent-color: var(--accent); }
 
@@ -275,7 +275,7 @@
   .page-actions { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
   #flash:empty { display: none; }
 
-  /* Log in, join: one centred panel. */
+  /* Log in, join: one centered panel. */
   .page.auth { --page: 26rem; padding-block-start: clamp(var(--space-l), 10dvb, 6rem); }
   .wordmark { font-size: var(--step-3); font-weight: 800; letter-spacing: -0.02em; }
 
@@ -386,7 +386,7 @@
   .row-actions form { display: contents; }
   .rows > li.off > .row-main { opacity: 0.6; }
 
-  /* A calendar's colour: an SVG square (a fill attribute, not a style, so
+  /* A calendar's color: an SVG square (a fill attribute, not a style, so
      the CSP allows it). */
   .swatch { flex: none; inline-size: 1rem; block-size: 1rem; border-radius: 0.25rem; overflow: hidden; }
   .swatch.big { display: inline-block; inline-size: 0.8em; block-size: 0.8em; margin-inline-end: var(--space-2xs); vertical-align: -0.05em; }
@@ -523,7 +523,7 @@
   }
 
   /* Which occurrences: a small modal with three plain choices. */
-  /* margin: auto centres a modal dialog; the reset's margin: 0 undid that. */
+  /* margin: auto centers a modal dialog; the reset's margin: 0 undid that. */
   .cal-scope { margin: auto; border: var(--hairline); border-radius: var(--radius-m); background: var(--surface); color: var(--text); padding: var(--panel-pad); inline-size: min(92vi, 22rem); }
   .cal-scope::backdrop { background: color-mix(in oklab, black 50%, transparent); }
   .cal-scope .form > button { inline-size: 100%; }

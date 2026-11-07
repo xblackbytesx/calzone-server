@@ -24,7 +24,7 @@ ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
     AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar
 
 # Dependency-cache layer: real manifests, dummy sources. Versions are
-# neutralised so a release bump does not invalidate the whole crate graph.
+# neutralized so a release bump does not invalidate the whole crate graph.
 # EVERY workspace member's manifest must be copied here: cargo loads the
 # whole workspace first. CI checks this.
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./

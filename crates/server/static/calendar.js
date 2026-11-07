@@ -59,7 +59,7 @@
     }, function () { return { ok: false, status: 0, data: null }; });
   }
 
-  /** Black or white text on an event colour: whichever contrasts more
+  /** Black or white text on an event color: whichever contrasts more
       (WCAG ratios), so mid tones get dark text. */
   function textOn(hex) {
     var m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
@@ -67,7 +67,7 @@
     var n = parseInt(m[1], 16);
     var lin = function (c) { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
     var L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-    // Pure black and white: with them every colour reaches 4.5:1 (the worst
+    // Pure black and white: with them every color reaches 4.5:1 (the worst
     // case is about 4.58), with near-black some cannot.
     var onWhite = 1.05 / (L + 0.05), onBlack = (L + 0.05) / 0.05;
     return onBlack >= onWhite ? "#000000" : "#ffffff";
@@ -493,7 +493,7 @@
     var prefs = prefsOf(id);
     var f = form.elements;
     prefs.display_name = f.display_name.value.trim() || null;
-    // Only a colour picked here becomes yours; otherwise you keep following
+    // Only a color picked here becomes yours; otherwise you keep following
     // the calendar's own.
     if (f.color.value !== form.getAttribute("data-color")) prefs.color = f.color.value;
     prefs.default_alarm = f.default_alarm.value === "none" ? null : parseInt(f.default_alarm.value, 10);

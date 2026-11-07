@@ -102,12 +102,12 @@ fn new_recovery_code() -> String {
     format!("{}-{}", &s[..5], &s[5..])
 }
 
-fn normalise(code: &str) -> String {
+fn normalize(code: &str) -> String {
     code.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect()
 }
 
 fn code_hash(code: &str) -> Vec<u8> {
-    Sha256::digest(normalise(code).as_bytes()).to_vec()
+    Sha256::digest(normalize(code).as_bytes()).to_vec()
 }
 
 /// Start (or continue) setup: the pending secret, made on first call and
@@ -130,7 +130,7 @@ pub async fn begin_setup(pool: &PgPool, key: &SecretKey, user: Uuid) -> Result<V
 
 /// Which step, if any, `code` is valid for around `now`.
 fn matching_step(secret: &[u8], code: &str, now_unix: i64) -> Option<i64> {
-    let digits = normalise(code);
+    let digits = normalize(code);
     if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
@@ -216,7 +216,7 @@ pub async fn check(pool: &PgPool, key: &SecretKey, user: Uuid, code: &str, now_u
         .await?;
         return Ok((r.rows_affected() == 1).then_some(Accepted::App));
     }
-    let n = normalise(code);
+    let n = normalize(code);
     if n.len() != 10 {
         return Ok(None);
     }

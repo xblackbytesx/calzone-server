@@ -1,5 +1,5 @@
 //! Personal settings (time zone, language, theme, week start, clock) and how
-//! each person sees each calendar (decision 8): their own colour, name,
+//! each person sees each calendar (decision 8): their own color, name,
 //! visibility, order and default reminder. Shared data never changes here.
 
 use std::collections::HashMap;
@@ -121,7 +121,7 @@ fn valid_color(c: &str) -> bool {
 pub async fn set_calendar_prefs(pool: &PgPool, actor: Actor, collection: Uuid, p: &CalendarPrefs) -> Result<()> {
     access::of(pool, actor, collection).await?.ok_or(DomainError::NotFound)?;
     if p.color.as_deref().is_some_and(|c| !valid_color(c)) {
-        return Err(DomainError::Invalid("a colour like #3a7bd5".into()));
+        return Err(DomainError::Invalid("a color like #3a7bd5".into()));
     }
     if p.display_name.as_deref().is_some_and(|n| n.chars().count() > 100) {
         return Err(DomainError::Invalid("a name of at most 100 characters".into()));
