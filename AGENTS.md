@@ -13,7 +13,7 @@ both repos.
 
 Record decisions here when they are made, with the date and the reason, and
 keep it true to the code: mark what is planned as planned. Never use em
-dashes. The phase 1 plan is `docs/plan-phase-1.md`; phase 2 is `docs/plan-phase-2.md`; phase 3 (drafted, not started) is `docs/plan-phase-3.md`.
+dashes. The phase 1 plan is `docs/plan-phase-1.md`; phase 2 is `docs/plan-phase-2.md`; phase 3 (drafted, not started) is `docs/plan-phase-3.md`; phase 4 (drafted, not started, and next after phase 2) is `docs/plan-phase-4.md`.
 
 ## Status
 
@@ -119,14 +119,15 @@ household test (decision 12) is the owner's and still open.
 One source of truth (the server), several doors into it, one shared core,
 two repos.
 
-## Crates (scaffolded; filled in by phase 1 steps 2 to 4)
+## Crates
 
 | Crate | Role | Rule |
 |---|---|---|
 | `crates/core` (`calzone-core`) | domain model, iCalendar/vCard parse and serialize, recurrence expansion, per-user layer split, sync types, three-way merge | Pure: no IO, no clock (time is passed in), no randomness |
 | `crates/dav` (`calzone-dav`) | CalDAV/CardDAV/WebDAV paths, request bodies, query filters, multistatus XML | Pure like the core: no IO; the server's `dav` module does auth and calls the domain (decision 28) |
 | `crates/server` (`calzone-server`) | axum + sqlx Postgres + askama/HTMX: domain service, storage, auth, web app, sync API, MCP, push | Runtime sqlx queries only (no `query!`), so builds never need a database |
-| `crates/ffi` (`calzone-ffi`) | UniFFI bindings for the app | Thin: JSON in and out (the core's own shapes), `flat_error` for real errors |
+| `crates/client` (`calzone-client`, planned: phase 4) | the phone's store (SQLite), pending changes and sync engine | Talks to the server only through the sync API |
+| `crates/ffi` (`calzone-ffi`, planned: phase 4) | UniFFI bindings for the app, over `calzone-client` | Thin: JSON in and out (the core's own shapes), `flat_error` for real errors |
 
 Server modules: `config`, `cli` (admin commands), `client` (client
 address), `audit` (the `auth_failure` line), `throttle` (login failure budgets), `domain` (`access`,
@@ -248,8 +249,9 @@ Settled 2026-11-05/06 (do not reopen):
       are created by an admin; no self sign-up.
     - Phones get per-device tokens through a QR sign-in shown in the web
       app (the wordwarz device-link pattern). Nothing to paste.
-    - Personal access tokens for Hermes and scripts are created in the web
-      app, each scoped to named collections with `read` or `write`.
+    - Assistants (Hermes) get their own account and tokens; collections
+      grant them access one by one (decision 43, which replaced the
+      personal access tokens first planned here).
     - DAV clients use app passwords, scoped like PATs, only while the DAV
       door is on.
     - Every token and password is revocable on its own. Only hashes are
@@ -852,16 +854,56 @@ Settled 2026-11-06:
       a "Skip to content" link; toasts are filled after they appear so
       screen readers announce them; the light theme's green is darker
       (`#176a3f`) for 4.5:1 on its tint.
+43. **Assistants and the MCP door (phase 3 design, 2026-11-07),**
+    decisions 10 and 17 made concrete; the plan is `docs/plan-phase-3.md`.
+    - **One assistant for the household,** not personal tokens: Hermes
+      answers both parents in a shared Matrix room and in DMs. An
+      assistant is a third kind of principal, named by an admin; no
+      passphrase, no web login, only `czt_` bearer tokens (purpose `mcp`,
+      so DAV passwords and MCP tokens never open each other's door).
+    - **Access is a grant per collection:** "MCP access" on the collection
+      page (Off, Busy only, Read, Read and add, Read, add and change; Off
+      by default), set only by
+      whoever may share it. The existing sharing checks are the boundary.
+      The `busy` and `add` levels are for assistants only: busy gives
+      times and nothing else (stripped in the domain), add creates and
+      undoes its own new objects.
+    - **Assume the answers leave the house:** Hermes delegates to a cloud
+      model. Every answer is small (31 days and 200 occurrences, 20
+      contacts per call, a search text required, no export); contacts
+      come through without street addresses, notes or photos.
+    - **No deletes through the door** (trust first), enforced in the
+      domain for assistants at every level; removing an occurrence or
+      cutting a series short counts as one. The only exception: undoing
+      its own new object. Every change records the acting principal;
+      anyone with write access may undo an assistant's change.
+    - **An assistant is nobody's account:** grants of read, add or write
+      only (never admin), never a group member or admin, no passphrase,
+      web login or app passwords; removing one disables it so the trail
+      survives. At most 60 changes an hour. `CLASS:PRIVATE` and
+      `CONFIDENTIAL` events come through as busy. The door takes fields,
+      never raw iCalendar or vCard. Its new events get each person's own
+      default reminder.
+    - **Parked:** tasks (VTODO) in the door and the web app; reminders
+      through the door (it cannot tell whose phone should ring).
+    - The door is `/mcp`, Streamable HTTP, off unless `CALZONE_MCP=on`;
+      the library is spike S3.
 
 ## Roadmap
+
+Order (settled 2026-11-07): 1, 2, then moving in (off Baikal onto CalZone
+with DAVx5 and Fossify, plus the phase 2 household test), 4a, 4b, 3, 5.
+The server only matters if the household lives in it, so the app comes
+before Hermes; and 4a's new sync is proven under Fossify before CalZone's
+own screens are built on it. Phase numbers stay as they are.
 
 | Phase | Builds | Replaces | Done when |
 |---|---|---|---|
 | 1 | core, storage, domain service, CalDAV/CardDAV door, admin web pages, Baikal import, export | Baikal | DAVx5 + Fossify and Thunderbird sync on both phones with no duplicates or lost edits |
 | 2 | sharing UI, per-user layer UI, the calendar and contacts web app, ICS publishing and subscriptions | (new) | two people share a calendar, and the web app passes decision 12 |
-| 3 | MCP door, PAT scopes in the UI | external caldav-mcp | Hermes reads and writes within its scope only |
-| 4a | `crates/ffi`, sync API, Android store + system bridge | DAVx5 | Fossify works on CalZone's bridge |
-| 4b | Android calendar UI, reminders, push | Fossify | daily use for a few weeks |
+| 3 | MCP door, assistant accounts, MCP access per collection | external caldav-mcp | Hermes reads and writes within what it was given only |
+| 4a | merge in the core, sync API, push, `crates/client` + `crates/ffi`, Android store + system bridge | DAVx5 | Fossify and the phone's contacts run on CalZone's bridge with DAVx5 uninstalled, for a few weeks |
+| 4b | Android calendar UI, the app's own reminders, widgets | Fossify | daily use for a few weeks |
 | 5 | invitations, free/busy, birthdays calendar from contacts | | |
 
 ## Invariants
