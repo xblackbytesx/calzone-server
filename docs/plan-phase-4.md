@@ -245,6 +245,12 @@ in two zones. Device-untested.
   core card edit; what Android cannot hold stays in the stored vCard.
 - The dialer and messengers show names for incoming calls.
 
+**Step 6 done 2026-11-09** (decision 50; app decisions 17 to 21): the
+mapping in the core (`calzone_core::android_contacts`), the card edit
+extended with labels, name parts, title, groups, photos and birthdays
+without a year, the bridge around every sync run in the app; checked on
+all 1412 household cards. Device-untested.
+
 ## Step 7: the switch on both phones
 
 - An APK release on GitHub (the wordwarz way); F-Droid later.
@@ -253,6 +259,13 @@ in two zones. Device-untested.
   would show everything twice), use it for a while, then uninstall
   DAVx5. Going back is turning DAVx5 on again.
 - Then a few weeks of daily use. That is 4a's exit.
+
+**Step 7 built 2026-11-09**: calzone-server 0.6.0 carries step 6's core;
+the app's `.github/workflows/release.yml` builds a signed APK from a tag,
+with the core from the server tag in `gradle.properties` `czCoreRef`;
+the guide is the app's `docs/switch-over.md`. The R8 release build was
+checked to build; it has not run on a phone yet. Open: the switch on both
+phones and the weeks of use.
 
 ## 4b: the CalZone app (outline)
 

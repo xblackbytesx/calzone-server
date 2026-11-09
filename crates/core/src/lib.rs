@@ -15,6 +15,7 @@
 //! - [`sync`]: the sync API's states, changes, batches and pushes.
 
 pub mod android;
+pub mod android_contacts;
 pub mod card;
 pub mod edit;
 pub mod feed;

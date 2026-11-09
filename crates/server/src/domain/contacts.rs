@@ -219,8 +219,8 @@ mod tests {
         let v = CardView {
             name: "Ada Lovelace".into(),
             org: "Analytical".into(),
-            phones: vec![Typed { kind: Kind::Mobile, value: "+44 7700 900001".into() }],
-            emails: vec![Typed { kind: Kind::Home, value: "ada@example.org".into() }],
+            phones: vec![Typed::new(Kind::Mobile, "+44 7700 900001")],
+            emails: vec![Typed::new(Kind::Home, "ada@example.org")],
             ..Default::default()
         };
         for q in ["ada", "LOVE", "ada love", "analyt", "example.org", "7700", "+44 7700", "900001"] {

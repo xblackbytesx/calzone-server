@@ -58,6 +58,10 @@ fn parse_row(row: &str) -> Result<calzone_core::android::EventRow, CzError> {
     serde_json::from_str(row).map_err(|e| CzError::Input { message: format!("not an Android row: {e}") })
 }
 
+fn parse_contact(row: &str) -> Result<calzone_core::android_contacts::ContactRow, CzError> {
+    serde_json::from_str(row).map_err(|e| CzError::Input { message: format!("not an Android contact: {e}") })
+}
+
 fn json(v: &impl Serialize) -> String {
     serde_json::to_string(v).expect("client types serialize")
 }
@@ -280,6 +284,33 @@ impl CalZone {
         phone_zone: String,
     ) -> Result<(), CzError> {
         Ok(bridge::move_to(&self.store, &from, &to, &name, &parse_row(&row)?, &phone_zone)?)
+    }
+
+    // --- the contacts bridge (decision 50) ---
+
+    /// `ContactRow` JSON for a stored vCard, or `None` when it is gone or
+    /// not a contact Android holds (a group card).
+    pub fn contact_row(&self, collection: String, name: String) -> Result<Option<String>, CzError> {
+        Ok(bridge::contact_row(&self.store, &collection, &name)?.map(|r| json(&r)))
+    }
+
+    /// An edited Android raw contact (`ContactRow` JSON) of a stored vCard.
+    /// Only what changed by meaning becomes a pending edit; returns whether
+    /// anything did.
+    pub fn apply_contact_row(&self, collection: String, name: String, row: String) -> Result<bool, CzError> {
+        Ok(bridge::apply_contact(&self.store, &collection, &name, &parse_contact(&row)?)?)
+    }
+
+    /// A raw contact another app made (`ContactRow` JSON): a new vCard
+    /// `<uid>.vcf`, waiting for the next sync. Returns its name.
+    pub fn create_from_contact_row(
+        &self,
+        collection: String,
+        row: String,
+        uid: String,
+        fallback_name: String,
+    ) -> Result<String, CzError> {
+        Ok(bridge::create_contact(&self.store, &collection, &parse_contact(&row)?, &uid, &fallback_name)?)
     }
 
     // --- editing ---

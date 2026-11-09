@@ -645,7 +645,7 @@ fn private_corpus_card_merges() {
             let v = card::read(&src).unwrap_or_else(|e| panic!("card {i}: {e}"));
             let with_phone = |n: &str| {
                 let mut phones = v.phones.clone();
-                phones.push(Typed { kind: Kind::Other, value: n.into() });
+                phones.push(Typed::new(Kind::Other, n));
                 phones
             };
             let mine = CardChange {
@@ -778,6 +778,75 @@ fn private_corpus_through_android() {
     }
     eprintln!(
         "private corpus through Android: {shown} events ({series} series, {exceptions} exceptions), {skipped} not events, two phone zones"
+    );
+    assert!(shown > 0);
+}
+
+/// The household's contacts through Android's contacts (decision 50): an
+/// unchanged raw contact is never an edit (also in Android's own order),
+/// and one edited field rewrites only its own lines.
+#[test]
+fn private_contacts_through_android() {
+    use calzone_core::android_contacts::{self as ac, Entry};
+
+    let files = private_files("vcf");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.vcf");
+        return;
+    }
+    let now = dt("2026-11-09 12:00");
+    let (mut shown, mut labeled, mut photos, mut birthdays, mut removed) = (0, 0, 0, 0, 0);
+    for f in files {
+        let text = std::fs::read_to_string(&f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        let doc = Document::parse(&text).unwrap_or_else(|_| panic!("private vcf does not parse"));
+        for (i, c) in doc.components.iter().enumerate() {
+            let src = c.to_string();
+            let row = ac::row(&src).unwrap_or_else(|| panic!("card {i}: not projected"));
+            shown += 1;
+            labeled += row.phones.iter().chain(&row.emails).filter(|e| e.kind == ac::TYPE_CUSTOM).count();
+            labeled += row.addresses.iter().filter(|a| a.kind == ac::TYPE_CUSTOM).count();
+            photos += usize::from(row.photo.is_some());
+            birthdays += usize::from(row.birthday.is_some());
+            let same = ac::apply(&src, &row, now).unwrap_or_else(|e| panic!("card {i}: refused: {e}"));
+            assert!(same == src, "card {i}: an unchanged contact became an edit");
+            let mut shuffled = row.clone();
+            shuffled.phones.reverse();
+            shuffled.emails.reverse();
+            shuffled.addresses.reverse();
+            shuffled.groups.reverse();
+            let same = ac::apply(&src, &shuffled, now).unwrap_or_else(|e| panic!("card {i}: refused: {e}"));
+            assert!(same == src, "card {i}: Android's order became an edit");
+
+            let mut noted = row.clone();
+            noted.note = "Edited by the bridge test".into();
+            let out = ac::apply(&src, &noted, now).unwrap_or_else(|e| panic!("card {i}: note refused: {e}"));
+            assert_eq!(missing_lines(&src, &out, &["NOTE", "REV"]), 0, "card {i}: a note edit lost a line");
+            let back = ac::row(&out).unwrap_or_else(|| panic!("card {i}: gone"));
+            assert!(back.note == noted.note && back.phones == row.phones, "card {i}: note not applied alone");
+
+            let mut more = row.clone();
+            more.phones.push(Entry { value: "+31 6 0000 0000".into(), kind: ac::phone::MOBILE, label: None });
+            let out = ac::apply(&src, &more, now).unwrap_or_else(|e| panic!("card {i}: phone refused: {e}"));
+            assert_eq!(missing_lines(&src, &out, &["REV"]), 0, "card {i}: a new phone lost a line");
+            let back = ac::row(&out).unwrap_or_else(|| panic!("card {i}: gone"));
+            assert!(back.phones.len() == row.phones.len() + 1, "card {i}: phone not added");
+            assert!(ac::apply(&out, &back, now).ok() == Some(out.clone()), "card {i}: does not read back unchanged");
+
+            // The last phone removed: its line goes, with its label when it had one.
+            if let Some(last) = row.phones.last() {
+                let mut fewer = row.clone();
+                fewer.phones.pop();
+                let out = ac::apply(&src, &fewer, now).unwrap_or_else(|e| panic!("card {i}: removal refused: {e}"));
+                let lost = missing_lines(&src, &out, &["REV"]);
+                let expect = if last.kind == ac::TYPE_CUSTOM { 2 } else { 1 };
+                assert_eq!(lost, expect, "card {i}: a removed phone took other lines along");
+                removed += 1;
+            }
+        }
+    }
+    eprintln!(
+        "private contacts through android: shown={shown} labeled={labeled} photos={photos} birthdays={birthdays} \
+         removals={removed}"
     );
     assert!(shown > 0);
 }

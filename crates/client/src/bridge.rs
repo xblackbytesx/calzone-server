@@ -1,9 +1,11 @@
-//! The system bridge's store side (decision 49): what to write into
-//! Android's calendar for a stored object, and Android's edits as pending
-//! edits. The mapping itself is the core's (`calzone_core::android`); this
-//! adds the store, the clock and the phone's zone.
+//! The system bridge's store side (decisions 49 and 50): what to write
+//! into Android's calendar and contacts for a stored object, and Android's
+//! edits as pending edits. The mappings are the core's
+//! (`calzone_core::android`, `calzone_core::android_contacts`); this adds
+//! the store, the clock and the phone's zone.
 
 use calzone_core::android::{self, EventRow, EventRows};
+use calzone_core::android_contacts::{self as contacts, ContactRow};
 use chrono::Utc;
 
 use crate::store::Store;
@@ -87,6 +89,39 @@ pub fn move_to(store: &Store, from: &str, to: &str, name: &str, row: &EventRow, 
     store.edit(from, name, None)
 }
 
+/// The raw contact for a stored vCard, or `None` when it is gone or not a
+/// contact Android holds (a group card).
+pub fn contact_row(store: &Store, collection: &str, name: &str) -> Result<Option<ContactRow>> {
+    Ok(store.object(collection, name)?.and_then(|o| contacts::row(&o.body)))
+}
+
+/// An edited raw contact of a stored vCard. Only what changed by meaning
+/// becomes an edit; returns whether anything did.
+pub fn apply_contact(store: &Store, collection: &str, name: &str, row: &ContactRow) -> Result<bool> {
+    let text = body(store, collection, name)?;
+    let out = contacts::apply(&text, row, now()).map_err(|e| Error::Input(e.to_string()))?;
+    if out == text {
+        return Ok(false);
+    }
+    store.edit(collection, name, Some(&out))?;
+    Ok(true)
+}
+
+/// A raw contact another app made: a new vCard named `<uid>.vcf`. Returns
+/// the name.
+pub fn create_contact(
+    store: &Store,
+    collection: &str,
+    row: &ContactRow,
+    uid: &str,
+    fallback_name: &str,
+) -> Result<String> {
+    let text = contacts::new_contact(row, uid, now(), fallback_name).map_err(|e| Error::Input(e.to_string()))?;
+    let name = format!("{uid}.vcf");
+    store.edit(collection, &name, Some(&text))?;
+    Ok(name)
+}
+
 #[cfg(test)]
 mod tests {
     use calzone_core::sync::{self as wire, Batch, Change, State};
@@ -159,5 +194,39 @@ mod tests {
         delete(&s, "a", &name, None, "Europe/Amsterdam").unwrap();
         assert!(s.object("a", &name).unwrap().is_none());
         assert!(matches!(apply_row(&s, "a", "nope.ics", &row, "UTC"), Err(Error::Input(_))));
+    }
+
+    const CARD: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:c\r\nFN:Bea Smith\r\nN:Smith;Bea;;;\r\n\
+        TEL;TYPE=cell:+31 6 1\r\nX-KEEP:yes\r\nEND:VCARD\r\n";
+
+    #[test]
+    fn contact_edits_and_new_contacts() {
+        let s = Store::in_memory().unwrap();
+        let mut book = collection("book");
+        book.kind = "addressbook".into();
+        s.set_collections(&[book], 0).unwrap();
+        let batch = Batch {
+            collection: "book".into(),
+            since: State(0),
+            state: State(1),
+            changes: vec![Change { name: "c.vcf".into(), revision: State(1), body: Some(CARD.into()) }],
+            more: false,
+        };
+        s.apply_batch(&batch, None).unwrap();
+
+        let row = contact_row(&s, "book", "c.vcf").unwrap().unwrap();
+        assert!(!apply_contact(&s, "book", "c.vcf", &row).unwrap(), "unchanged is no edit");
+        assert!(s.pending("book").unwrap().is_empty());
+        let mut edited = row.clone();
+        edited.note = "Met at the pool".into();
+        assert!(apply_contact(&s, "book", "c.vcf", &edited).unwrap());
+        let body = s.object("book", "c.vcf").unwrap().unwrap().body;
+        assert!(body.contains("NOTE:Met at the pool") && body.contains("X-KEEP:yes"));
+        assert_eq!(s.pending("book").unwrap().len(), 1);
+
+        let name = create_contact(&s, "book", &edited, "u-2", "(no name)").unwrap();
+        assert_eq!(name, "u-2.vcf");
+        assert!(s.object("book", &name).unwrap().unwrap().body.contains("FN:Bea Smith"));
+        assert!(contact_row(&s, "book", "gone.vcf").unwrap().is_none());
     }
 }

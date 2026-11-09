@@ -482,7 +482,7 @@ fn change_from(
         values
             .into_iter()
             .enumerate()
-            .map(|(i, v)| Typed { kind: Kind::parse(kinds.get(i).map(String::as_str).unwrap_or("other")), value: v })
+            .map(|(i, v)| Typed::new(Kind::parse(kinds.get(i).map(String::as_str).unwrap_or("other")), v))
             .collect()
     };
     let (ak, street, pc, city, region, country) = (
@@ -502,6 +502,7 @@ fn change_from(
             city: get(&city, i),
             region: get(&region, i),
             country: get(&country, i),
+            label: None,
         })
         .collect();
     let birthday = (one("birthday") != one("birthday_was"))
@@ -510,7 +511,9 @@ fn change_from(
             if b.trim().is_empty() {
                 Ok(None)
             } else {
-                NaiveDate::parse_from_str(b.trim(), "%Y-%m-%d").map(Some).map_err(|_| WebError::bad(a.err_bad_form))
+                NaiveDate::parse_from_str(b.trim(), "%Y-%m-%d")
+                    .map(|d| Some(Birthday::Full(d)))
+                    .map_err(|_| WebError::bad(a.err_bad_form))
             }
         })
         .transpose()?;
@@ -523,6 +526,7 @@ fn change_from(
         addresses: Some(addresses),
         birthday,
         note: Some(one("note")),
+        ..Default::default()
     };
     Ok((change, pairs.into_iter().collect()))
 }

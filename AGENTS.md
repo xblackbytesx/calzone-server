@@ -114,7 +114,11 @@ restores (migration `0011_sync_floor.sql`), 227 workspace tests. Step 4
 done 2026-11-09: the app in `/workspace/calzone` (sign-in, account, sync,
 push, settings; its own `AGENTS.md` holds the app's decisions),
 device-untested. Step 5 done 2026-11-09: the calendar bridge (decision 49),
-238 workspace tests; device-untested. Next: step 6, the contacts bridge.
+238 workspace tests; device-untested. Step 6 done 2026-11-09: the
+contacts bridge (decision 50), 247 workspace tests; device-untested. Step 7
+built 2026-11-09: 0.6.0 (the core the first app release pins), the app's
+release workflow and its `docs/switch-over.md`; the switch itself, on both
+phones, and a few weeks of daily use are the owner's, and close 4a.
 
 ## Architecture
 
@@ -167,13 +171,13 @@ calendar page), `calendar` (the page and the event panel), `contacts`, `feeds`
 Client modules: `store` (Store: collections, objects, pending, conflicts,
 local changes), `engine` (sign_in, sync, sign_out, push registration),
 `transport` (the app's HTTP), `link` (the sign-in address), `bridge`
-(Android's calendar rows and edits).
+(Android's calendar and contact rows and edits).
 
 Dav modules: `xml` (namespaced tree, escaping), `path` (URL space, hrefs),
 `request` (PROPFIND, PROPPATCH, MKCOL/MKCALENDAR, REPORT bodies), `filter`
 (calendar-query and addressbook-query), `response` (multistatus, errors).
 
-Core modules: `android` (rows, apply, new_event: Android's calendar), `lines` (Document, Component, Item, Line; fold), `object`
+Core modules: `android` (rows, apply, new_event: Android's calendar), `android_contacts` (row, apply, new_contact: Android's contacts), `lines` (Document, Component, Item, Line; fold), `object`
 (inspect_calendar, inspect_card, Bounds, unescape), `recur` (expand, When,
 Occurrence, Warning), `vtimezone` (VZone), `split` (split, merge,
 UserLayer), `import` (decode, split_calendar, split_cards, assemble),
@@ -1203,6 +1207,47 @@ Settled 2026-11-06:
       tests for zones, all-day, floating, RDATE, EXDATE, canceled
       exceptions, Fossify's equal forms, rules and reminders; the client
       for edits, moves, new and deleted events.
+50. **The contacts bridge (phase 4 step 6, 2026-11-09):
+    `calzone_core::android_contacts`, `calzone_client::bridge`, and the
+    app's `bridge/ContactsBridge.kt`.** Built on decisions 5, 39, 45, 48
+    and 49, the same way as the calendar.
+    - **The mapping is the core's, and pure.** `row` projects a stored
+      vCard into one raw contact, after DAVx5's vcard4android (GPL-3.0,
+      credited in the module): the structured name with FN as the shown
+      name; ORG (its parts joined) with TITLE; phones, emails and
+      addresses with Android's type numbers (`TYPE=work,fax` is
+      `TYPE_FAX_WORK`); a custom label (`item1.X-ABLabel`, which DAVx5
+      and Apple write; 113 entries in the household's cards) is
+      `TYPE_CUSTOM` with that label, Apple's own labels without their
+      marks; the birthday as `yyyy-MM-dd` or `--MM-dd`; the note;
+      CATEGORIES as groups; an inline photo. A photo given as a link,
+      group cards (`KIND:group`) and everything else stay in the stored
+      text only.
+    - **Edits by meaning.** `apply` compares an edited raw contact with
+      what `row` wrote: entries as sets of type, label (custom types only)
+      and value, so Android's order is no change; an entry still there
+      keeps its own vCard line, byte for byte, label included; only new
+      ones are written (a labeled one as the next free `itemN` group).
+      Parts of the name changed: N is rewritten and FN follows when it was
+      made from them; only the shown name changed: FN. A card without N
+      parts is not edited by the parts Android takes apart from its shown
+      name. A contact made in another app becomes `<uuid>.vcf`; with no
+      name it is shown as its organization, a phone number, an email
+      address or "(no name)".
+    - **The core card edit grew for it** (decision 39 still holds): the
+      other N parts (middle, prefix, suffix), TITLE, CATEGORIES (a set),
+      a photo (inline, or removed), a birthday without a year (`--MMDD`
+      in 4.0, `--MM-DD` in 3.0), a chosen FN, and labels: a change without
+      a label (the web's) keeps a line's label, `Some("")` asks for a line
+      without one, and a removed line takes its label line along. A data
+      URI whose comma is escaped (`base64\,`, six household photos) now
+      reads as a photo.
+    - **Checked:** all 1412 household cards: an unchanged raw contact is
+      never an edit, also in reverse order; a note edit or a new phone
+      loses no line and reads back unchanged; removing the last phone
+      removes exactly its line (and its label). Unit tests for types,
+      labels, names, dates, groups, photos and new contacts; the client
+      for edits and new contacts.
 
 ## Roadmap
 

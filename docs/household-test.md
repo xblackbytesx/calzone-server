@@ -6,7 +6,7 @@ over the task cards, watch, write down, report.
 
 ## Before the test
 
-1. CalZone 0.5.0 runs on the VPS (`deploy/README.md`), with two-factor
+1. CalZone 0.6.0 runs on the VPS (`deploy/README.md`), with two-factor
    set up for both of you.
 2. Your real calendars and contacts are copied from Baikal
    (`docs/leaving-baikal.md`). A test on real data finds real problems;
