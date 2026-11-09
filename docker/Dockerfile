@@ -28,12 +28,17 @@ ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
 # EVERY workspace member's manifest must be copied here: cargo loads the
 # whole workspace first. CI checks this.
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates/client/Cargo.toml crates/client/
 COPY crates/core/Cargo.toml crates/core/
 COPY crates/dav/Cargo.toml crates/dav/
+COPY crates/ffi/Cargo.toml crates/ffi/
 COPY crates/server/Cargo.toml crates/server/
 RUN set -eux; \
     sed -i '/^\[workspace.package\]/,/^\[/ s/^version = .*/version = "0.0.0"/' Cargo.toml; \
-    mkdir -p crates/core/src crates/dav/src crates/server/src; \
+    mkdir -p crates/client/src crates/core/src crates/dav/src crates/ffi/src/bin crates/server/src; \
+    echo '' > crates/client/src/lib.rs; \
+    echo '' > crates/ffi/src/lib.rs; \
+    echo 'fn main(){}' > crates/ffi/src/bin/uniffi-bindgen.rs; \
     echo '' > crates/core/src/lib.rs; \
     echo '' > crates/dav/src/lib.rs; \
     echo '' > crates/server/src/lib.rs; \

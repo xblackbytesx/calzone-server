@@ -1,0 +1,27 @@
+[package]
+name = "calzone-ffi"
+description = "UniFFI bindings over calzone-client for the Android app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+# cdylib: the .so the app loads; lib: so Rust tests can call the same API.
+crate-type = ["cdylib", "lib"]
+name = "calzone_ffi"
+
+[[bin]]
+name = "uniffi-bindgen"
+required-features = ["cli"]
+
+[features]
+cli = ["uniffi/cli"]
+
+[dependencies]
+calzone-client.workspace = true
+calzone-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uniffi = "0.32"

@@ -677,3 +677,107 @@ fn private_corpus_card_merges() {
     eprintln!("household card merges: {cards}");
     assert!(cards > 0);
 }
+
+/// The system bridge (decision 49) on every household event: a row exactly
+/// as the bridge wrote it is never an edit (the series and each exception),
+/// and a title edit in Android changes the title and nothing else. Counts
+/// only.
+#[test]
+fn private_corpus_through_android() {
+    use calzone_core::android;
+
+    let files = private_files("ics");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.ics");
+        return;
+    }
+    let now = dt("2026-11-09 12:00");
+    let stamps = ["DTSTAMP", "LAST-MODIFIED", "SEQUENCE", "SUMMARY"];
+    let (mut shown, mut skipped, mut exceptions, mut series) = (0, 0, 0, 0);
+    for zone in [chrono_tz::Europe::Amsterdam, chrono_tz::America::New_York] {
+        for f in &files {
+            let text = std::fs::read_to_string(f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+            for (i, obj) in objects_from_export(&text).iter().enumerate() {
+                let Some(rows) = android::rows(obj, zone) else {
+                    skipped += 1;
+                    continue;
+                };
+                shown += 1;
+                if rows.main.duration.is_some() {
+                    series += 1;
+                }
+                let same = android::apply(obj, &rows.main, zone, now, "n")
+                    .unwrap_or_else(|e| panic!("event {i}: refused: {e}"));
+                assert!(same.as_deref() == Some(obj.as_str()), "event {i}: an unchanged series row became an edit");
+                for x in &rows.exceptions {
+                    exceptions += 1;
+                    let same = android::apply(obj, x, zone, now, "n")
+                        .unwrap_or_else(|e| panic!("event {i}: exception refused: {e}"));
+                    assert!(
+                        same.as_deref() == Some(obj.as_str()),
+                        "event {i}: an unchanged exception row became an edit"
+                    );
+                }
+                let mut renamed = rows.main.clone();
+                renamed.title = Some("Renamed by the bridge test".into());
+                let out = android::apply(obj, &renamed, zone, now, "n")
+                    .unwrap_or_else(|e| panic!("event {i}: title edit refused: {e}"))
+                    .unwrap_or_else(|| panic!("event {i}: a title edit deleted it"));
+                assert_eq!(missing_lines(obj, &out, &stamps), 0, "event {i}: a title edit lost a line");
+                let back = android::rows(&out, zone).unwrap_or_else(|| panic!("event {i}: gone from Android"));
+                assert!(
+                    back.main.title.as_deref() == Some("Renamed by the bridge test"),
+                    "event {i}: title not applied"
+                );
+                assert!(
+                    (back.main.dtstart, back.main.rrule.as_deref(), back.exceptions.len())
+                        == (rows.main.dtstart, rows.main.rrule.as_deref(), rows.exceptions.len()),
+                    "event {i}: a title edit moved something"
+                );
+                // Fossify moves the first occurrence later: a new
+                // exception row. It lands as one override, and reads back as
+                // an unchanged row.
+                if rows.main.duration.is_some() {
+                    let len = android::parse_android_duration(rows.main.duration.as_deref().unwrap_or("P0S"))
+                        .map_or(0, |d| d.num_milliseconds());
+                    // All-day series move a day, timed ones an hour.
+                    let shift = if rows.main.all_day { 86_400_000 } else { 3_600_000 };
+                    let moved = android::EventRow {
+                        dtstart: rows.main.dtstart + shift,
+                        dtend: Some(rows.main.dtstart + shift + len),
+                        duration: None,
+                        rrule: None,
+                        rdate: None,
+                        exrule: None,
+                        exdate: None,
+                        original_instance: Some(rows.main.dtstart),
+                        ..rows.main.clone()
+                    };
+                    if rows.exceptions.iter().any(|x| x.original_instance == Some(rows.main.dtstart)) {
+                        continue;
+                    }
+                    let out = android::apply(obj, &moved, zone, now, "n")
+                        .unwrap_or_else(|e| panic!("event {i}: moving an occurrence refused: {e}"))
+                        .unwrap_or_else(|| panic!("event {i}: moving an occurrence deleted it"));
+                    assert_eq!(missing_lines(obj, &out, &stamps), 0, "event {i}: moving an occurrence lost a line");
+                    let back = android::rows(&out, zone).unwrap_or_else(|| panic!("event {i}: gone from Android"));
+                    let x = back
+                        .exceptions
+                        .iter()
+                        .find(|x| x.original_instance == Some(rows.main.dtstart))
+                        .unwrap_or_else(|| panic!("event {i}: the moved occurrence is not an exception row"));
+                    assert!(x.dtstart == moved.dtstart, "event {i}: the occurrence is not where it was moved");
+                    assert!(back.main.dtstart == rows.main.dtstart, "event {i}: the series moved too");
+                    let same =
+                        android::apply(&out, x, zone, now, "n").unwrap_or_else(|e| panic!("event {i}: refused: {e}"));
+                    assert!(same.as_deref() == Some(out.as_str()), "event {i}: the new exception row reads as an edit");
+                    exceptions += 1;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "private corpus through Android: {shown} events ({series} series, {exceptions} exceptions), {skipped} not events, two phone zones"
+    );
+    assert!(shown > 0);
+}

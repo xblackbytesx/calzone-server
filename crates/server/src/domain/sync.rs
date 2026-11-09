@@ -95,13 +95,14 @@ pub async fn changes(pool: &PgPool, actor: Actor, collection: Uuid, since: Optio
     let limit = limit.clamp(1, 1000);
     let mut tx = pool.begin().await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY").execute(&mut *tx).await?;
-    let token: i64 = sqlx::query_scalar("SELECT sequence FROM collections WHERE id = $1")
+    let (token, floor): (i64, i64) = sqlx::query_as("SELECT sequence, floor FROM collections WHERE id = $1")
         .bind(collection)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(DomainError::NotFound)?;
     let from = match since {
-        Some(s) if s < 0 || s > token => return Err(DomainError::BadSyncToken),
+        // Below the floor: issued before a restore (`start_over`).
+        Some(s) if s < floor || s > token => return Err(DomainError::BadSyncToken),
         Some(s) => s,
         None => 0,
     };

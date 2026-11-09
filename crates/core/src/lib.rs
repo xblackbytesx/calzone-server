@@ -14,6 +14,7 @@
 //! - [`merge`]: the three-way merge of one object, field by field.
 //! - [`sync`]: the sync API's states, changes, batches and pushes.
 
+pub mod android;
 pub mod card;
 pub mod edit;
 pub mod feed;

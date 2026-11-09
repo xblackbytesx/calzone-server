@@ -137,7 +137,8 @@ the app, archives that tree and starts it again:
 ```
 
 Restore: `docker compose down`, put the archived `database` directory back,
-`docker compose up -d`. A portable copy besides: a SQL dump, and each
+`docker compose up -d`, then `cz resync`: every phone and DAV client syncs
+from the start, so none keeps changes the backup does not have. A portable copy besides: a SQL dump, and each
 person's "Download everything" zip, which any calendar app can read.
 
 ```

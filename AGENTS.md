@@ -108,7 +108,13 @@ Phase 4a: spikes S4 (decision 44) and S5 (decision 45) decided
 and three-way merge (decision 46), checked on every household event and
 card. Step 2 done 2026-11-09: the sync API, phone sign-in by QR code and
 UnifiedPush (decision 47, migration `0010_sync.sql`), 216 workspace tests.
-Next: step 3, `crates/client` and `crates/ffi` (`docs/plan-phase-4.md`).
+Step 3 done 2026-11-09: `crates/client` (the phone's store and sync
+engine) and `crates/ffi` (decision 48), `calzone-server resync` for
+restores (migration `0011_sync_floor.sql`), 227 workspace tests. Step 4
+done 2026-11-09: the app in `/workspace/calzone` (sign-in, account, sync,
+push, settings; its own `AGENTS.md` holds the app's decisions),
+device-untested. Step 5 done 2026-11-09: the calendar bridge (decision 49),
+238 workspace tests; device-untested. Next: step 6, the contacts bridge.
 
 ## Architecture
 
@@ -132,8 +138,8 @@ two repos.
 | `crates/core` (`calzone-core`) | domain model, iCalendar/vCard parse and serialize, recurrence expansion, per-user layer split, sync types, three-way merge | Pure: no IO, no clock (time is passed in), no randomness |
 | `crates/dav` (`calzone-dav`) | CalDAV/CardDAV/WebDAV paths, request bodies, query filters, multistatus XML | Pure like the core: no IO; the server's `dav` module does auth and calls the domain (decision 28) |
 | `crates/server` (`calzone-server`) | axum + sqlx Postgres + askama/HTMX: domain service, storage, auth, web app, sync API, MCP, push | Runtime sqlx queries only (no `query!`), so builds never need a database |
-| `crates/client` (`calzone-client`, planned: phase 4) | the phone's store (SQLite), pending changes and sync engine | Talks to the server only through the sync API |
-| `crates/ffi` (`calzone-ffi`, planned: phase 4) | UniFFI bindings for the app, over `calzone-client` | Thin: JSON in and out (the core's own shapes), `flat_error` for real errors |
+| `crates/client` (`calzone-client`) | the phone's store (SQLite), pending changes and sync engine | Talks to the server only through the sync API |
+| `crates/ffi` (`calzone-ffi`) | UniFFI bindings for the app, over `calzone-client` | Thin: JSON in and out (the core's own shapes), `flat_error` for real errors |
 
 Server modules: `config`, `cli` (admin commands), `client` (client
 address), `audit` (the `auth_failure` line), `throttle` (login failure budgets), `domain` (`access`,
@@ -158,11 +164,16 @@ calendar page), `calendar` (the page and the event panel), `contacts`, `feeds`
 (languages and every string); askama templates in `templates/`, assets in
 `static/`), `migrations/` (numbered SQL, embedded, run at every start).
 
+Client modules: `store` (Store: collections, objects, pending, conflicts,
+local changes), `engine` (sign_in, sync, sign_out, push registration),
+`transport` (the app's HTTP), `link` (the sign-in address), `bridge`
+(Android's calendar rows and edits).
+
 Dav modules: `xml` (namespaced tree, escaping), `path` (URL space, hrefs),
 `request` (PROPFIND, PROPPATCH, MKCOL/MKCALENDAR, REPORT bodies), `filter`
 (calendar-query and addressbook-query), `response` (multistatus, errors).
 
-Core modules: `lines` (Document, Component, Item, Line; fold), `object`
+Core modules: `android` (rows, apply, new_event: Android's calendar), `lines` (Document, Component, Item, Line; fold), `object`
 (inspect_calendar, inspect_card, Bounds, unescape), `recur` (expand, When,
 Occurrence, Warning), `vtimezone` (VZone), `split` (split, merge,
 UserLayer), `import` (decode, split_calendar, split_cards, assemble),
@@ -187,7 +198,7 @@ Everything runs through `make` (docker compose); no host toolchain is needed.
 | `make test` | `cargo test --workspace --release`, Postgres integration tests included |
 | `make lint` | `cargo fmt --check` + `clippy -D warnings` (the CI gate) |
 | `make image` / `up` / `down` / `logs` | build and smoke-test the production image locally (reads `./.env`) |
-| `make android-core` | phase 4 |
+| `make android-core` | `calzone-ffi` for Android (arm64, x86_64), its Kotlin bindings and a host library, into `dist/` |
 
 CI: `.github/workflows/ci.yml` runs fmt, clippy, the tests (Postgres
 service), the Dockerfile manifest check and the python caldav interop on
@@ -1069,6 +1080,129 @@ Settled 2026-11-06:
       stand-in push server, decrypted as the phone would: the right
       phones, one message per gather, a person's own settings to that
       person only, and a `410` drops the endpoint.
+
+48. **The phone's store and sync engine (phase 4 step 3, 2026-11-09):
+    `calzone-client` and `calzone-ffi`.** Built on decisions 14, 44, 46
+    and 47.
+    - **HTTP is the app's.** The engine says what to send through a
+      `Transport` trait; the app implements it with OkHttp (through
+      UniFFI's `HttpTransport`, a foreign trait), adding the server's
+      address and the device token. TLS, the phone's own certificates and
+      GrapheneOS's Network permission stay Android's, and the library
+      carries no TLS. "No answer" and "an answer" are distinct, so the
+      engine tells "try later" (`Network`) from "sign in again"
+      (`SignedOut`, on any `401`) and from an unexpected answer (`Server`).
+    - **The store** (SQLite, decision 44's shape): collections as the
+      server lists them with the state this phone applied; objects as full
+      text plus a projection (kind, UID, summary, UTC bounds) and a
+      candidates-in-range query; pending edits, each with the copy it
+      started from and a version; conflicts to show; and a local change
+      log of what came from the server, which the bridge reads and then
+      forgets (step 5).
+    - **Edits** show in the store at once and wait as pending. A second
+      edit keeps the first one's base; made and deleted before a sync, it
+      never reaches the server. The text must parse and suit the
+      collection; whether the person may make the edit is the server's
+      call.
+    - **One run:** list the collections (gone ones go, with their waiting
+      edits kept as conflicts), upload pending edits per collection in
+      chunks (200 edits or about 4 MB), then pull every collection whose
+      state moved. Edits go up before changes come down, so the server
+      merges against its newest copy. A run with nothing to do is one
+      request; a second run in a row does no harm (decision 45).
+    - **Answers:** an edit still as sent is done and the merged copy
+      replaces it. An edit changed again while its answer was on the way
+      is rebased onto the merged copy with the core's merge and waits for
+      the next run, so no answer overwrites a newer edit. A refused edit
+      goes back to the copy it started from and is kept as a conflict
+      with the phone's text. Merge conflicts are kept too, for the
+      person.
+    - **Pulls:** each batch is one transaction with its state, so a run
+      cut off keeps what it applied. An object with an edit waiting is
+      left alone (the edit goes up next run). A full sync (the first, or
+      after `409 bad_state`) stores its state only when done and then
+      drops what the server did not list.
+    - **Signing in** from the QR code's address (`link::parse`). Signing
+      in again to the same account on the same server keeps the store,
+      waiting edits included; anything else starts empty. Signing out
+      wipes it.
+    - **After restoring a backup:** the server's change log goes back in
+      time and later writes could reuse numbers a phone already saw, so it
+      would miss changes without knowing. `calzone-server resync`
+      (migration `0011_sync_floor.sql`) renumbers every collection's log,
+      revisions and undo history past a gap and refuses older states, so
+      every phone and DAV client syncs from the start. It is part of the
+      restore procedure in `deploy/README.md`.
+    - **`calzone-ffi`:** one `CalZone` object over the store, JSON in and
+      out (the core's and the client's serde shapes), a flat error per
+      kind (`CzException.Network`, `.SignedOut`, `.Server`, `.Input`,
+      `.Store`), and `parseLink`. Calls block; the app makes them off the
+      main thread. `make android-core` builds arm64 and x86_64 libraries
+      (minSdk 35), the Kotlin bindings (from the unstripped debug build)
+      and a host library for the app's JVM tests, into `dist/`.
+    - **Checked:** store unit tests (projection, waiting edits, an answer
+      racing a newer edit, refusals, the full-sync sweep, a collection
+      going away); the engine over real HTTP against the server on
+      Postgres (`crates/server/tests/client_pg.rs`): 1,230 objects in
+      batches, a quiet run is one request, edits and deletes both ways, two
+      phones and the calendar page's API on one event (both phones end on
+      the server's copy, the loser is reported, nothing duplicated), read
+      access (refused and undone, a reminder stays personal), the network
+      failing half way, a restore with `resync`, a removed phone; and the
+      Kotlin bindings compiled and run on the JVM against the host
+      library, with a Kotlin transport.
+
+49. **The calendar bridge (phase 4 step 5, 2026-11-09):
+    `calzone_core::android`, `calzone_client::bridge`, and the app's
+    `bridge/CalendarBridge.kt`.** Built on decisions 5, 8, 9, 14, 45 and 48.
+    - **The mapping is the core's, and pure** (the phone's zone and the
+      clock are passed in). `rows` projects a stored event into Android's
+      rows: one for the event, one per moved or canceled occurrence. It
+      follows DAVx5's synctools (GPL-3.0, credited in the module): UTC
+      milliseconds with an IANA zone id; all-day at UTC midnight in `UTC`;
+      floating times in the phone's zone; a zone only the object's
+      VTIMEZONE knows becomes UTC; DTEND for a single event, DURATION as
+      `P<n>S` or `P<n>D` for a series (the provider crashes on `PT<n>S`);
+      RDATE and EXDATE as UTC lists (`…T000000Z` for all-day), the start
+      first among RDATEs, RDATEs dropped next to an endless RRULE;
+      exceptions keyed by their original instance time; the person's own
+      display reminders in minutes before the start. Tasks and journals
+      are not projected.
+    - **Edits by meaning.** `apply` compares an edited row with what
+      `rows` wrote, field by field: text, the times as instants (DURATION
+      parsed the way Android writes it), RRULE with parts and lists sorted
+      and defaults dropped, the reminder set. Only what changed goes
+      through `edit` (whole event or "only this one"), so everything else
+      stays byte for byte. A moved time keeps its kind (floating stays
+      floating, a zone stays its zone, all-day stays a date). A canceled
+      exception row, a deleted exception row, or an EXDATE another app
+      added deletes that occurrence. A new row becomes a new event
+      (`<uuid>.ics`, an empty title gets the app's "(untitled)"); a row
+      moved to another of our calendars becomes a delete in one and a
+      create in the other. Availability and access level are written but
+      not read back yet.
+    - **Recurrence on the phone (the exception to decision 9 the plan
+      asked to record):** Android expands RRULE, EXDATE and exceptions
+      itself for the apps that read its tables, as it does for DAVx5.
+      CalZone's own screens (4b) expand with the core.
+    - **The order of a run:** Android's dirty and deleted rows become
+      pending edits, the engine syncs, then the server's changes (the
+      store's local change log) are written into Android. A row another
+      app is editing (still dirty) is never overwritten; it is read on the
+      next run. Writes use the sync-adapter URIs and select by our
+      calendar ids.
+    - **Calendars** are the calendar collections this phone shows, with
+      the person's own color and name, read-only where they may only read
+      or it is a subscribed feed. Switching one off removes it from
+      Android (after its edits were read). A new calendar, a new mapping
+      version, or a change of the phone's zone writes everything again.
+    - **Checked:** the household corpus in two phone zones (185 events,
+      36 series): an unchanged row is never an edit, a title edit changes
+      only the title, and moving each series' first occurrence the way
+      Fossify does lands as one override that reads back unchanged. Unit
+      tests for zones, all-day, floating, RDATE, EXDATE, canceled
+      exceptions, Fossify's equal forms, rules and reminders; the client
+      for edits, moves, new and deleted events.
 
 ## Roadmap
 

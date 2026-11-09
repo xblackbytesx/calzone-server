@@ -1,5 +1,5 @@
 # DEVELOPMENT + TESTS: source bind-mounted, bacon rebuilds on change.
-#   make dev | make test | make lint
+#   make dev | make test | make lint | make android-core
 # Not for deployment; see deploy/docker-compose.yml for that.
 services:
   calzone-server:
@@ -28,6 +28,17 @@ services:
       - cargo-registry:/usr/local/cargo/registry
       - target:/app/target
 
+  android-core:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.android-core
+    image: calzone-android-core
+    profiles: ["android"]
+    volumes:
+      - ..:/app
+      - cargo-registry:/usr/local/cargo/registry
+      - android-target:/app/target
+
   db:
     image: postgres:17
     container_name: calzone-server-dev-db
@@ -46,4 +57,5 @@ services:
 volumes:
   cargo-registry:
   target:
+  android-target:
   db-dev:

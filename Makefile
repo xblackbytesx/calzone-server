@@ -13,6 +13,7 @@
 #   make test          full test suite (core + Postgres integration)
 #   make lint          rustfmt --check + clippy -D warnings (same gate as CI)
 #   make fmt           rustfmt
+#   make android-core  calzone-ffi .so + Kotlin bindings into dist/ (for the app, ../calzone)
 #
 # Local production-image smoke test (reads ./.env)
 #   make image         build calzone-server:local from docker/Dockerfile
@@ -23,7 +24,7 @@ DEV_COMPOSE   = docker compose -f docker/docker-compose-dev.yml
 LOCAL_COMPOSE = docker compose --env-file .env -f docker/docker-compose-build.yml
 DEV_RUN       = $(DEV_COMPOSE) run --rm --build calzone-server
 
-.PHONY: dev reset test lint fmt image up down logs
+.PHONY: dev reset test lint fmt android-core image up down logs
 
 dev:
 	$(DEV_COMPOSE) up --build
@@ -41,6 +42,9 @@ lint:
 
 fmt:
 	$(DEV_RUN) cargo fmt --all
+
+android-core:
+	$(DEV_COMPOSE) --profile android run --rm --build android-core
 
 image:
 	$(LOCAL_COMPOSE) build

@@ -181,6 +181,11 @@ Postgres suites, push decrypted as the phone would.
 - Tests: the engine against the real server in-process, over HTTP, on
   Postgres. Two engines and the web API on one calendar.
 
+**Step 3 done 2026-11-09** (decision 48): the store, the engine (HTTP
+through the app's own client), `calzone-ffi` with `make android-core`;
+checked over real HTTP against the server on Postgres, and the Kotlin
+bindings run on the JVM. Added: `calzone-server resync` after a restore.
+
 ## Step 4: the app, account and sync
 
 - `/workspace/calzone` scaffolded with its own `AGENTS.md`.
@@ -199,6 +204,15 @@ Postgres suites, push decrypted as the phone would.
   (decision 36).
 - Robolectric screenshots and the API contract test, like wordwarz.
 
+**Step 4 done 2026-11-09** (app `AGENTS.md`, decisions 1 to 12):
+`/workspace/calzone` with QR sign-in (scan, camera link, paste), the
+CalZone account with both sync adapters, one engine run at a time from
+Android's triggers and WorkManager, UnifiedPush, the settings screen
+(conflicts in plain words, which collections this phone shows), the
+GrapheneOS network warning, English and Dutch, dark by default. 12 JVM
+tests (golden files, the real core over OkHttp, screenshots), lint clean.
+Device-untested.
+
 ## Step 5: the calendar bridge
 
 - Calendars into CalendarContract with my color, name, visibility and
@@ -214,6 +228,11 @@ Postgres suites, push decrypted as the phone would.
   create in the other, sent together.
 - Record the recurrence exception (see "How the pieces fit") as a
   decision.
+
+**Step 5 done 2026-11-09** (decision 49; app decisions 13 to 16): the
+mapping in the core (`calzone_core::android`), edits by meaning, the
+bridge around every sync run in the app; checked on the household corpus
+in two zones. Device-untested.
 
 ## Step 6: the contacts bridge
 

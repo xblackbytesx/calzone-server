@@ -52,5 +52,7 @@ hkdf = "0.12"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+# The phone's engine against this server over HTTP (tests/client_pg.rs).
+calzone-client.workspace = true
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }

@@ -179,6 +179,47 @@ pub async fn visible(pool: &PgPool, actor: Actor, kind: CollectionKind) -> Resul
     Ok(rows.into_iter().filter_map(from_row).collect())
 }
 
+/// The gap every collection's numbering jumps by in [`start_over`]: more
+/// writes than a restored backup can be behind by.
+pub const RESYNC_GAP: i64 = 1_000_000;
+
+/// After restoring a backup: renumber every collection's change log,
+/// revisions and undo history past a gap, and refuse sync states from
+/// before (decision 48). Every phone and DAV client then syncs from the
+/// start, so none keeps something the restored server no longer has.
+/// Returns how many collections. Run with the server stopped or idle.
+pub async fn start_over(pool: &PgPool) -> Result<u64> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("LOCK TABLE collections IN EXCLUSIVE MODE").execute(&mut *tx).await?;
+    // Each collection shifts by its own sequence plus the gap, so new
+    // numbers never meet old ones (no unique clash mid-update).
+    let shift = format!("c.sequence + {RESYNC_GAP}");
+    sqlx::query(&format!(
+        "UPDATE changes ch SET sequence = ch.sequence + {shift} FROM collections c WHERE ch.collection_id = c.id"
+    ))
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(&format!(
+        "UPDATE objects o SET revision = o.revision + {shift} FROM collections c WHERE o.collection_id = c.id"
+    ))
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(&format!(
+        "UPDATE object_history h SET after_revision = h.after_revision + {shift}
+         FROM collections c WHERE h.collection_id = c.id AND h.after_revision IS NOT NULL"
+    ))
+    .execute(&mut *tx)
+    .await?;
+    let n = sqlx::query(&format!(
+        "UPDATE collections SET floor = sequence + {RESYNC_GAP}, sequence = 2 * sequence + {RESYNC_GAP}"
+    ))
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    tx.commit().await?;
+    Ok(n)
+}
+
 /// Display name, description and color (admin or owner).
 pub async fn update_properties(
     pool: &PgPool,

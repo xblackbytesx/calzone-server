@@ -22,7 +22,8 @@ pub const USAGE: &str = "usage:
   calzone-server app-password revoke USER ID
   calzone-server import file USER [--into OWNER/SLUG] FILE...   (.ics, .vcf, Google Takeout .zip)
   calzone-server import baikal USER URL BAIKAL-USER   (password from BAIKAL_PASSWORD or stdin)
-  calzone-server export USER FILE.zip";
+  calzone-server export USER FILE.zip
+  calzone-server resync                     (after restoring a backup: every phone and DAV client syncs from the start)";
 
 /// An import report as text: counts only, never content.
 async fn report(pool: &PgPool, actor: uuid::Uuid, id: uuid::Uuid) -> Result<String> {
@@ -184,6 +185,10 @@ pub async fn run(pool: &PgPool, args: &[&str]) -> Result<String> {
             let zip = crate::export::everything(pool, owner.id).await?;
             std::fs::write(path, &zip).with_context(|| format!("cannot write {path}"))?;
             Ok(format!("wrote {path} ({} bytes)", zip.len()))
+        }
+        ["resync"] => {
+            let n = collections::start_over(pool).await?;
+            Ok(format!("{n} collections renumbered; every phone and DAV client syncs from the start at its next sync"))
         }
         _ => bail!("{USAGE}"),
     }

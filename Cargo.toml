@@ -5,8 +5,10 @@ resolver = "3"
 # Android app run the same code, so they always agree.
 # dav: the optional CalDAV/CardDAV door. Talks to the domain service only.
 # server: storage, sharing, auth, the web app, the doors; the binary.
-# ffi joins in phase 4 (UniFFI bindings for the app).
-members = ["crates/core", "crates/dav", "crates/server"]
+# client: the phone's store and sync engine (SQLite); talks to the server
+# only through the sync API.
+# ffi: UniFFI bindings over client and core for the Android app.
+members = ["crates/core", "crates/dav", "crates/server", "crates/client", "crates/ffi"]
 
 [workspace.package]
 version = "0.4.1"
@@ -17,6 +19,7 @@ license = "GPL-3.0-or-later"
 [workspace.dependencies]
 calzone-core = { path = "crates/core" }
 calzone-dav = { path = "crates/dav" }
+calzone-client = { path = "crates/client" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
