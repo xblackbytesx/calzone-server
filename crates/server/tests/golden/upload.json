@@ -1,0 +1,13 @@
+{
+  "changes": [
+    {
+      "base": "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//CalZone//EN\r\nBEGIN:VEVENT\r\nUID:swim\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Europe/Amsterdam:20260310T090000\r\nDTEND;TZID=Europe/Amsterdam:20260310T100000\r\nSUMMARY:Swimming\r\nLOCATION:Pool\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      "body": "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//CalZone//EN\r\nBEGIN:VEVENT\r\nUID:swim\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Europe/Amsterdam:20260310T090000\r\nDTEND;TZID=Europe/Amsterdam:20260310T100000\r\nSUMMARY:Swim lesson\r\nLOCATION:Sports hall\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      "name": "swim.ics"
+    },
+    {
+      "body": "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nEND:VCARD\r\n",
+      "name": "card.ics"
+    }
+  ]
+}

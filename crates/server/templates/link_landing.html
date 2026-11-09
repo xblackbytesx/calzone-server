@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block lang %}{{ lang }}{% endblock %}
+{% block title %}{{ a.link_title }} · CalZone{% endblock %}
+{% block main_class %}auth{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1 class="wordmark">CalZone</h1>
+  <p>{{ a.link_landing }}</p>
+</section>
+{% endblock %}

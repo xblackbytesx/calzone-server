@@ -1,10 +1,22 @@
 {% extends "layout.html" %}
 {% block title %}{{ nav.t.nav_devices }} · CalZone{% endblock %}
 {% block content %}
-<header class="page-header"><div><h1>{{ nav.t.nav_devices }}</h1><p class="meta">{{ nav.a.devices_meta }}</p></div></header>
+<header class="page-header"><div><h1>{{ nav.t.nav_devices }}</h1><p class="meta">{{ nav.a.devices_page_meta }}</p></div></header>
+<section class="panel">
+  <header class="panel-header"><h2>{{ nav.a.phones }}</h2><p class="meta">{{ nav.a.phones_meta }}</p></header>
+  <form method="post" action="/devices/link"><button type="submit" class="primary">{{ nav.a.show_code }}</button></form>
+  {% if phones.is_empty() %}<p class="empty">{{ nav.a.no_phones }}</p>{% else %}
+  <ul class="rows">
+    {% for d in phones %}
+    <li><div class="row-main"><span class="row-title">{{ d.label }}{% if d.push %} <span class="badge ok">{{ nav.a.push_on }}</span>{% endif %}</span><span class="hint">{{ nav.a.added }} {{ d.created }}, {{ nav.a.last_used }} {{ d.used }}</span></div>
+      <div class="row-actions"><form method="post" action="/devices/phones/{{ d.id }}/remove" hx-confirm="{{ nav.a.remove_device_q_pre }} {{ d.label }}{{ nav.a.remove_device_q_post }}"><button type="submit" class="danger compact">{{ nav.a.remove }}</button></form></div></li>
+    {% endfor %}
+  </ul>{% endif %}
+</section>
+{% if nav.dav %}
 <div class="panels">
   <section class="panel">
-    <h2>{{ nav.a.your_devices }}</h2>
+    <header class="panel-header"><h2>{{ nav.a.dav_apps }}</h2><p class="meta">{{ nav.a.devices_meta }}</p></header>
     {% if devices.is_empty() %}<p class="empty">{{ nav.a.none_yet }}</p>{% else %}
     <ul class="rows">
       {% for d in devices %}
@@ -31,4 +43,5 @@
     </form>
   </section>
 </div>
+{% endif %}
 {% endblock %}

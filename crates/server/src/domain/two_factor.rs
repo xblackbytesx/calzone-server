@@ -260,10 +260,11 @@ pub async fn disable(pool: &PgPool, user: Uuid) -> Result<()> {
     Ok(())
 }
 
-/// The setup QR code as inline SVG (no style attributes, so the CSP allows
-/// it), dark on light whatever the page theme.
+/// A QR code as inline SVG (no style attributes, so the CSP allows it),
+/// dark on light whatever the page theme: two-factor setup and phone
+/// sign-in.
 pub fn qr_svg(uri: &str) -> String {
-    let code = qrcode::QrCode::new(uri.as_bytes()).expect("an otpauth URI fits a QR code");
+    let code = qrcode::QrCode::new(uri.as_bytes()).expect("a short URI fits a QR code");
     let svg = code
         .render::<qrcode::render::svg::Color>()
         .min_dimensions(220, 220)

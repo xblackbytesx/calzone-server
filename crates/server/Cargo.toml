@@ -44,6 +44,10 @@ hmac = "0.12"
 sha1 = "0.10"
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+# UnifiedPush message encryption (RFC 8291, aes128gcm; decision 16), the
+# wordwarz-server code: the push server relays ciphertext it cannot read.
+p256 = { version = "0.13", default-features = false, features = ["ecdh", "std"] }
+hkdf = "0.12"
 # Google Takeout uploads and the per-user export (deflate, pure Rust).
 zip = { version = "2", default-features = false, features = ["deflate"] }
 

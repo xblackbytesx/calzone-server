@@ -1,0 +1,25 @@
+{
+  "collections": [
+    {
+      "access": "write",
+      "color": "#3a7bd5",
+      "components": [
+        "VEVENT"
+      ],
+      "description": "Everyone's plans",
+      "id": "47c582ad-1b62-4390-b11a-ced6ed4f4061",
+      "kind": "calendar",
+      "mine": {
+        "color": "#d53a7b",
+        "default_alarm": 30,
+        "hidden": false
+      },
+      "name": "Family",
+      "owner": "jonas",
+      "owner_name": "Jonas",
+      "read_only": false,
+      "state": 2,
+      "subscribed": false
+    }
+  ]
+}

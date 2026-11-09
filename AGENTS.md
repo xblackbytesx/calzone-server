@@ -13,7 +13,7 @@ both repos.
 
 Record decisions here when they are made, with the date and the reason, and
 keep it true to the code: mark what is planned as planned. Never use em
-dashes. The phase 1 plan is `docs/plan-phase-1.md`; phase 2 is `docs/plan-phase-2.md`; phase 3 (drafted, not started) is `docs/plan-phase-3.md`; phase 4 (drafted, not started, and next after phase 2) is `docs/plan-phase-4.md`.
+dashes. The phase 1 plan is `docs/plan-phase-1.md`; phase 2 is `docs/plan-phase-2.md`; phase 3 (drafted, not started) is `docs/plan-phase-3.md`; phase 4 (under way, before phase 3) is `docs/plan-phase-4.md`.
 
 ## Status
 
@@ -106,7 +106,9 @@ nothing on any page), README screenshots from a made-up household. Phase 2 is cl
 Phase 4a: spikes S4 (decision 44) and S5 (decision 45) decided
 2026-11-07 and 2026-11-09. Step 1 done 2026-11-09: the core's sync types
 and three-way merge (decision 46), checked on every household event and
-card. Next: step 2, the server's sync API (`docs/plan-phase-4.md`).
+card. Step 2 done 2026-11-09: the sync API, phone sign-in by QR code and
+UnifiedPush (decision 47, migration `0010_sync.sql`), 216 workspace tests.
+Next: step 3, `crates/client` and `crates/ffi` (`docs/plan-phase-4.md`).
 
 ## Architecture
 
@@ -141,8 +143,11 @@ delete, changes_since; `app_passwords`: create, list, revoke, verify;
 `two_factor`: TOTP, recovery codes, secrets at rest; `prefs`: settings;
 `events`: occurrences, writes, undo; `contacts`: list, detail, writes,
 photos; `feeds`: secret links and the published feed; `subscriptions`:
-subscribed calendars, schedule, `replace`), `feeds` (the SSRF-guarded
-fetcher and the refresher task), `import`
+subscribed calendars, schedule, `replace`; `devices`: sign-in codes, device
+tokens, push endpoints; `sync`: the collection list, change batches,
+merged uploads), `feeds` (the SSRF-guarded
+fetcher and the refresher task), `sync` (the `/sync/v1` door), `push`
+(the change listener and UnifiedPush sends), `webpush` (RFC 8291), `import`
 (`Run`: files and Takeout zips; `baikal`: the CalDAV/CardDAV reader;
 `digest`), `export` (zip, one collection), `dav` (`auth`: Basic; `props`:
 live properties; handlers), `web` (`session`, `pages`, `collections`,
@@ -994,6 +999,76 @@ Settled 2026-11-06:
       (`item1.TEL` with `item1.X-ABLABEL`) merge line by line, so two
       sides adding the same new group name could pair a label with the
       wrong number.
+
+47. **The sync API (phase 4 step 2, 2026-11-09): `/sync/v1`, phone
+    sign-in and push.** Built on decisions 10, 15, 16 and 46.
+    - **Sign-in:** the Devices page shows a QR code holding
+      `<public URL>/link/czl_<code>`, and the same address as text to
+      paste: 256 bits, stored as SHA-256, one use, 10 minutes. It comes
+      from a signed-in session, so no second factor is asked again. In a
+      browser that address is only a page saying to use the app. The app
+      posts the code and its own name to `POST /sync/v1/link` and gets a
+      device token `czd_...` (shown once, hash stored, last use recorded at
+      most once a minute). A phone reaches everything its person can;
+      scoped app passwords stay for other apps.
+    - **Devices page:** always shown now. Phones are listed with "push on"
+      and removed one by one (token and push endpoint go at once). The app
+      password half shows only while the DAV door is on.
+    - **Routes:** `POST /link`; `GET`/`DELETE /me` (the account; sign this
+      phone out); `PUT`/`DELETE /push`; `GET /collections`;
+      `GET /collections/{id}/changes?since=&limit=`; `POST
+      /collections/{id}/changes`. Bearer token; a disabled person or a
+      removed phone gets `401`. Mounted whatever `CALZONE_DAV` says.
+    - **JSON:** the core's `sync` types, snake_case. Errors are
+      `{"error", "code"}`, and the app branches on the code only:
+      `unauthorized`, `not_found` (unseen looks the same), `bad_state`,
+      `bad_request`, `link_used`, `push_off`, `bad_endpoint`, `too_large`,
+      `server`.
+    - **Changes:** each object once at its newest revision, oldest first,
+      with the person's layer. A batch holds at most `limit` changes
+      (default 200, at most 1000) and about 4 MB of text; cut short, its
+      state is its newest revision, so asking again from there misses
+      nothing. No `since` is a full sync whose first batch has no
+      tombstones; later batches are "changes since" and may carry a
+      tombstone for something the phone never had, which it ignores. A
+      state ahead of the collection is `409 bad_state`: the phone syncs
+      from the start. One repeatable-read snapshot per batch.
+    - **Uploads:** up to 500 edits to one collection, in one transaction
+      under the collection lock. Each is merged with the person's current
+      copy (decision 46). An edit that changes nothing writes nothing (no
+      new revision, so phones never ping-pong). With read access only the
+      person's own reminders may change; the shared part must come out
+      byte for byte the same, as on the web. A refused edit is listed
+      with its reason (`read_only`, `invalid`, `uid_taken`, `bad_name`)
+      and the rest go through. The answer is not a state: the phone pulls
+      afterwards. Sync writes are not in the web's undo history.
+    - **Push:** Postgres triggers (migration `0010_sync.sql`) send
+      `NOTIFY calzone_changes` at commit for a collection's new sequence,
+      name, description or color, a new or changed grant, and (to that
+      person only) their own calendar settings. So every door, the CLI,
+      imports and feed refreshes wake phones without knowing about push.
+      One task listens, gathers for 2 seconds, and sends each phone whose
+      person can see a changed collection one encrypted message:
+      `{"collections": [{"id", "state"}], "all"}` (`all` past 40
+      collections). Keys are required; nothing goes out in plain text.
+      `CALZONE_PUSH_HOSTS` empty means push is off. A removed grant is not
+      pushed (that person lost access); their phone drops the collection
+      at its next sync. Push is a hint: a notice lost while the listener
+      reconnects costs freshness, never data.
+    - **Golden files:** `crates/server/tests/golden/*.json`, written by
+      `tests/golden_pg.rs` (`UPDATE_GOLDEN=1` regenerates them on
+      purpose); the app's contract test reads them.
+    - **Checked** on Postgres (`tests/sync_pg.rs`): sign-in with the DAV
+      door off, codes that work once and expire, disabled people, removed
+      phones; the collection list with each person's view, paging,
+      tombstones, a bad state; two phones offline with a web edit in
+      between (different fields both survive, the same field keeps the
+      server's value and reports the phone's, both phones end on one
+      copy, nothing duplicated, sending it again writes nothing); a
+      reminder on a read-only calendar stays personal; pushes to a
+      stand-in push server, decrypted as the phone would: the right
+      phones, one message per gather, a person's own settings to that
+      person only, and a `410` drops the endpoint.
 
 ## Roadmap
 

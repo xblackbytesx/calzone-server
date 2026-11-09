@@ -10,8 +10,11 @@ pub mod domain;
 pub mod export;
 pub mod feeds;
 pub mod import;
+pub mod push;
+pub mod sync;
 pub mod throttle;
 pub mod web;
+pub mod webpush;
 
 use std::sync::Arc;
 
@@ -47,6 +50,8 @@ pub struct AppState {
     pub default_timezone: chrono_tz::Tz,
     /// `CALZONE_FEEDS_ALLOW_PRIVATE`.
     pub feeds_allow_private: bool,
+    /// `CALZONE_PUSH_HOSTS` and the client that sends pushes (decision 16).
+    pub push: Arc<push::Settings>,
 }
 
 impl AppState {
@@ -62,12 +67,14 @@ impl AppState {
             two_factor: config::TwoFactorPolicy::Admins,
             default_timezone: chrono_tz::UTC,
             feeds_allow_private: false,
+            push: Arc::new(push::Settings::off()),
         }
     }
 }
 
 pub fn router(state: AppState) -> Router {
-    let mut app = Router::new().route("/healthz", get(healthz)).merge(web::routes(&state));
+    // The sync API is mounted whatever CALZONE_DAV says (decision 3).
+    let mut app = Router::new().route("/healthz", get(healthz)).merge(web::routes(&state)).merge(sync::routes());
     if state.dav {
         app = app.merge(dav::routes());
     }

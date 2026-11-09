@@ -1,0 +1,4 @@
+{
+  "code": "bad_state",
+  "error": "this state was never issued here: sync from the start"
+}

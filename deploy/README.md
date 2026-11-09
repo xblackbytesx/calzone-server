@@ -28,6 +28,7 @@ backups) and `CALZONE_PUBLIC_URL`.
 | `CALZONE_SECRET_KEY` | required; encrypts two-factor secrets. Lost: everyone sets two-factor up again |
 | `CALZONE_TWO_FACTOR` | who must use two-factor sign-in: `everyone`, `admins` (default) or `optional` |
 | `CALZONE_DEFAULT_TIMEZONE` | IANA zone for people who have not set theirs (default `UTC`) |
+| `CALZONE_PUSH_HOSTS` | host names of the UnifiedPush servers (ntfy) phones register on, comma-separated, e.g. `ntfy.privacy.box`. Empty (default): no pushes; phones still sync on Android's schedule |
 | `CALZONE_FEEDS_ALLOW_PRIVATE` | `off` (default): calendar subscriptions never fetch private, loopback or link-local addresses. `on` only to subscribe to a feed inside your own network |
 
 Create the database directory, owned by Postgres's container user:
@@ -50,7 +51,8 @@ curl -fsS https://calzone.privacy.box/healthz
 ```
 
 Expect `ok`. The log line `CalDAV/CardDAV door on` (or `off`) confirms
-`CALZONE_DAV` was read.
+`CALZONE_DAV` was read; `push on` (or `push off`) confirms
+`CALZONE_PUSH_HOSTS`.
 
 ## The first admin
 
@@ -67,8 +69,8 @@ authenticator app; keep the recovery codes), change the passphrase under
 Settings, then do the rest in
 the browser: People (add the household; each gets a temporary passphrase to
 hand over), Calendars & contacts (create, color, share with a person or a
-group), and Devices (one password per phone or app, optionally limited to
-some calendars).
+group), and Devices (a QR code that signs a phone in to the CalZone app, and for
+other apps one password each, optionally limited to some calendars).
 
 The same is possible from the shell: `cz collection add`, `cz app-password
 add|list|revoke` (`cz help` lists them). A forgotten passphrase: an admin

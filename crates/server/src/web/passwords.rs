@@ -1,5 +1,6 @@
-//! Device passwords: app passwords for DAV clients (decision 10), only
-//! useful while the DAV door is on.
+//! The Devices page (decision 10): phones with the CalZone app, signed in
+//! with a one-time QR code (decision 47), and app passwords for DAV clients,
+//! shown only while the DAV door is on.
 
 use std::collections::HashMap;
 
@@ -13,12 +14,21 @@ use super::session::WebUser;
 use super::{Nav, Page, WebError, base_url, html, i18n};
 use crate::AppState;
 use crate::domain::app_passwords::{self, Scope};
+use crate::domain::devices;
 use crate::domain::{Access, Collection, CollectionKind, collections};
 
 pub struct DeviceRow {
     pub id: Uuid,
     pub label: String,
     pub scope: String,
+    pub created: String,
+    pub used: String,
+}
+
+pub struct PhoneRow {
+    pub id: Uuid,
+    pub label: String,
+    pub push: bool,
     pub created: String,
     pub used: String,
 }
@@ -33,6 +43,7 @@ pub struct Choice {
 #[template(path = "devices.html")]
 struct DevicesPage {
     nav: Nav,
+    phones: Vec<PhoneRow>,
     devices: Vec<DeviceRow>,
     choices: Vec<Choice>,
 }
@@ -77,8 +88,19 @@ pub async fn list(State(st): State<AppState>, user: WebUser) -> Page {
             used: p.last_used_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_else(|| a.never.into()),
         });
     }
+    let phones = devices::list(&st.pool, user.id())
+        .await?
+        .into_iter()
+        .map(|d| PhoneRow {
+            id: d.id,
+            label: d.label,
+            push: d.push,
+            created: d.created_at.format("%Y-%m-%d").to_string(),
+            used: d.last_used_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_else(|| a.never.into()),
+        })
+        .collect();
     let choices = all.iter().map(|c| Choice { id: c.id, label: name(c, a), writable: c.access.can_write() }).collect();
-    html(DevicesPage { nav: Nav::new(&st, &user, "devices"), devices, choices })
+    html(DevicesPage { nav: Nav::new(&st, &user, "devices"), phones, devices, choices })
 }
 
 #[derive(Template)]
@@ -130,4 +152,42 @@ pub async fn create(State(st): State<AppState>, user: WebUser, headers: HeaderMa
 pub async fn revoke(State(st): State<AppState>, user: WebUser, Path(id): Path<Uuid>) -> Page {
     app_passwords::revoke(&st.pool, user.id(), id).await?;
     Ok(Redirect::to("/devices").into_response())
+}
+
+#[derive(Template)]
+#[template(path = "device_link.html")]
+struct LinkPage {
+    nav: Nav,
+    qr: String,
+    url: String,
+}
+
+/// A one-time sign-in code for the CalZone app, as a QR code and as an
+/// address to paste (10 minutes). It comes from a signed-in session, so the
+/// phone is not asked for two-factor again.
+pub async fn create_link(State(st): State<AppState>, user: WebUser, headers: HeaderMap) -> Page {
+    let (code, _) = devices::create_link(&st.pool, user.id()).await?;
+    let url = format!("{}/link/{code}", base_url(&st, &headers));
+    html(LinkPage { nav: Nav::new(&st, &user, "devices"), qr: crate::domain::two_factor::qr_svg(&url), url })
+}
+
+/// Sign a phone out: its token stops working at once.
+pub async fn remove_phone(State(st): State<AppState>, user: WebUser, Path(id): Path<Uuid>) -> Page {
+    devices::remove(&st.pool, user.id(), id).await?;
+    Ok(Redirect::to("/devices").into_response())
+}
+
+#[derive(Template)]
+#[template(path = "link_landing.html")]
+struct Landing {
+    lang: &'static str,
+    a: &'static i18n::A,
+}
+
+/// The QR code's address opened in a browser (a camera app, say): it only
+/// works in the CalZone app. The code is not looked at, so this page says
+/// nothing about whether it is still good.
+pub async fn link_landing(headers: HeaderMap, Path(_code): Path<String>) -> Page {
+    let lang = i18n::lang(None, &headers);
+    html(Landing { lang: i18n::code(lang), a: i18n::a(lang) })
 }

@@ -7,6 +7,10 @@
 //! so the server merges with [`crate::merge`] without keeping old revisions;
 //! the answer per push is a [`Pushed`]. JMAP's state-and-changes idea, not
 //! JMAP itself.
+//!
+//! The rest are the other JSON shapes of `/sync/v1` (decision 47): the
+//! collection list, the upload [`Answer`], the account, and the [`Notice`]
+//! a push message carries.
 
 use serde::{Deserialize, Serialize};
 
@@ -80,6 +84,146 @@ pub struct Pushed {
     pub conflicts: Vec<Conflict>,
 }
 
+/// Why the server refused one [`Push`]. The phone keeps the edit and shows
+/// it as a conflict; sending it again changes nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Reason {
+    /// The person may only read this collection (their own reminders
+    /// aside, which always go through).
+    ReadOnly,
+    /// Not a valid object, or not one this collection takes.
+    Invalid,
+    /// Another object in the collection already has this UID.
+    UidTaken,
+    /// The name cannot be used for an object.
+    BadName,
+}
+
+/// A [`Push`] the server refused, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rejected {
+    pub name: String,
+    pub reason: Reason,
+    /// For the log and for people, not for the phone's logic.
+    pub message: String,
+}
+
+/// The phone's edits to one collection, sent together.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Upload {
+    pub changes: Vec<Push>,
+}
+
+/// The server's answer to an [`Upload`]: every push is either pushed or
+/// rejected. The phone still pulls afterwards; this is not a state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct Answer {
+    pub pushed: Vec<Pushed>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rejected: Vec<Rejected>,
+}
+
+/// What the person may do with a collection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Access {
+    Read,
+    Write,
+    Admin,
+    Owner,
+}
+
+/// A calendar or address book the person can see, as the phone lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Collection {
+    pub id: String,
+    /// `calendar` or `addressbook`.
+    pub kind: String,
+    /// The owner's account name and display name.
+    pub owner: String,
+    pub owner_name: String,
+    /// The shared name (the slug when it has none), description and color.
+    pub name: String,
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Calendars: the component types it takes; empty takes all.
+    pub components: Vec<String>,
+    pub access: Access,
+    /// Nothing but the person's own reminders can change here: read access,
+    /// or a subscribed feed.
+    pub read_only: bool,
+    /// Filled from an outside `.ics` feed.
+    pub subscribed: bool,
+    /// Its position in the change log now.
+    pub state: State,
+    /// How this person sees it (decision 8).
+    pub mine: Mine,
+}
+
+/// One person's own settings for a collection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct Mine {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub hidden: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<i32>,
+    /// Minutes before the start, for new events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_alarm: Option<i32>,
+}
+
+/// Everything the person can see.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Collections {
+    pub collections: Vec<Collection>,
+}
+
+/// The signed-in person and this phone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Account {
+    /// The account name (what the web login takes).
+    pub name: String,
+    pub display_name: String,
+    /// This phone's id and its name on the Devices page.
+    pub device: String,
+    pub device_label: String,
+    /// The push hosts this server sends to; empty: push is off, so the
+    /// phone relies on Android's schedule.
+    pub push_hosts: Vec<String>,
+    /// This phone has a push endpoint registered.
+    pub push: bool,
+}
+
+/// The answer to a redeemed sign-in code. The token is shown only here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignedIn {
+    pub token: String,
+    pub account: Account,
+}
+
+/// One collection in a push message: something changed there, and where
+/// its change log is now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Changed {
+    pub id: String,
+    pub state: State,
+}
+
+/// The (encrypted) push message body (decision 16): which collections
+/// changed, nothing about what. `all` means "too many to list: sync
+/// everything"; the list is then empty.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Notice {
+    pub collections: Vec<Changed>,
+    #[serde(default)]
+    pub all: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +251,20 @@ mod tests {
             r#"{"collection":"c","since":3,"state":7,"changes":[{"name":"a.ics","revision":7}],"more":false}"#
         );
         assert_eq!(serde_json::from_str::<Batch>(&json).unwrap(), batch);
+    }
+
+    #[test]
+    fn answers_and_notices_have_a_small_json_shape() {
+        let answer = Answer {
+            pushed: vec![Pushed { name: "a.ics".into(), revision: State(4), body: None, conflicts: Vec::new() }],
+            rejected: vec![Rejected { name: "b.ics".into(), reason: Reason::ReadOnly, message: "read-only".into() }],
+        };
+        assert_eq!(
+            serde_json::to_string(&answer).unwrap(),
+            r#"{"pushed":[{"name":"a.ics","revision":4}],"rejected":[{"name":"b.ics","reason":"read_only","message":"read-only"}]}"#
+        );
+        let notice = Notice { collections: vec![Changed { id: "c".into(), state: State(9) }], all: false };
+        assert_eq!(serde_json::to_string(&notice).unwrap(), r#"{"collections":[{"id":"c","state":9}],"all":false}"#);
+        assert_eq!(serde_json::from_str::<Answer>(r#"{"pushed":[]}"#).unwrap(), Answer::default());
     }
 }

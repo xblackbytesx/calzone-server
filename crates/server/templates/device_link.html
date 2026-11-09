@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+{% block title %}{{ nav.a.link_title }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ nav.a.link_title }}</h1><p class="meta">{{ nav.a.link_meta }}</p></div></header>
+<section class="panel">
+  <div class="qr">{{ qr|safe }}</div>
+  <p class="hint">{{ nav.a.link_paste }}</p>
+  <div class="copy-line"><code id="link">{{ url }}</code><button type="button" class="compact" data-copy="#link">{{ nav.a.copy }}</button></div>
+  <a class="button primary" href="/devices">{{ nav.a.done }}</a>
+</section>
+{% endblock %}

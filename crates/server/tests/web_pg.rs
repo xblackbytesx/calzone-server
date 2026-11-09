@@ -292,11 +292,14 @@ async fn device_passwords_work_on_the_door() {
     bob.login("bob", "bob passphrase").await;
     assert_eq!(bob.post(&format!("/devices/{id}/revoke"), &[]).await.status, StatusCode::NOT_FOUND);
 
-    // Door off: no Devices section in the navigation.
+    // Door off: Devices stays (phones with the app sign in there), without
+    // the app passwords.
     let off = calzone_server::router(calzone_server::AppState { dav: false, ..db.state() });
     let mut a2 = Browser::new(&off);
     a2.login("anna", "anna passphrase").await;
-    assert!(!a2.get("/collections").await.body.contains("href=\"/devices\""));
+    assert!(a2.get("/collections").await.body.contains("href=\"/devices\""));
+    let page = a2.get("/devices").await.body;
+    assert!(page.contains("Show a sign-in code") && !page.contains("Create password"));
     db.drop().await;
 }
 

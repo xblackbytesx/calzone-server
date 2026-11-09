@@ -1,0 +1,33 @@
+{
+  "pushed": [
+    {
+      "body": "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//CalZone//EN\r\nBEGIN:VEVENT\r\nUID:swim\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;TZID=Europe/Amsterdam:20260310T090000\r\nDTEND;TZID=Europe/Amsterdam:20260310T100000\r\nSUMMARY:Swim lesson\r\nLOCATION:Outdoor pool\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      "conflicts": [
+        {
+          "component": "VEVENT",
+          "lost": {
+            "field": "LOCATION",
+            "kept": [
+              "LOCATION:Outdoor pool"
+            ],
+            "kind": "field",
+            "lost": [
+              "LOCATION:Sports hall"
+            ]
+          },
+          "recurrence_id": null,
+          "uid": "swim"
+        }
+      ],
+      "name": "swim.ics",
+      "revision": 5
+    }
+  ],
+  "rejected": [
+    {
+      "message": "wrong kind of object for this collection",
+      "name": "card.ics",
+      "reason": "invalid"
+    }
+  ]
+}

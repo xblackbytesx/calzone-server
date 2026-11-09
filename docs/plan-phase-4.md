@@ -164,6 +164,11 @@ them) and the household corpus, events and cards.
   between; nothing lost or duplicated, losers reported.
 - `CALZONE_DAV=off` still works: the phone does not need the door.
 
+**Step 2 done 2026-11-09** (decision 47): `/sync/v1` with sign-in by QR
+code, change batches and merged uploads; push from database change
+notices, so every door wakes the phones; golden files for the app; the
+Postgres suites, push decrypted as the phone would.
+
 ## Step 3: `crates/client` and `crates/ffi`
 
 - The store: collections, objects (full text plus the projection the

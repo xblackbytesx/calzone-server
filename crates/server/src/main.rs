@@ -37,6 +37,7 @@ async fn main() -> Result<()> {
                 cookie_secure: cfg.cookie_secure,
                 public_url: cfg.public_url.clone(),
                 behind_proxy: cfg.behind_proxy,
+                push: std::sync::Arc::new(calzone_server::push::Settings::new(cfg.push_hosts.clone())),
                 ..AppState::new(pool)
             };
             let stale = calzone_server::domain::imports::mark_interrupted(&state.pool).await?;
@@ -45,6 +46,12 @@ async fn main() -> Result<()> {
             }
             tracing::info!(dav = state.dav, "CalDAV/CardDAV door {}", if state.dav { "on" } else { "off" });
             calzone_server::feeds::spawn_refresher(state.pool.clone(), state.feeds_allow_private);
+            if state.push.on() {
+                calzone_server::push::start(state.pool.clone(), state.push.clone()).await?;
+                tracing::info!(hosts = %state.push.hosts.join(", "), "push on");
+            } else {
+                tracing::info!("push off (CALZONE_PUSH_HOSTS is empty): phones sync on Android's schedule");
+            }
             let app = router(state);
             let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
             tracing::info!(bind = %cfg.bind, "listening");

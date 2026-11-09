@@ -28,6 +28,10 @@ pub struct Config {
     /// `CALZONE_DEFAULT_TIMEZONE`: for people who have not set theirs yet
     /// (the calendar page sends the browser's). Default UTC.
     pub default_timezone: chrono_tz::Tz,
+    /// `CALZONE_PUSH_HOSTS`: the UnifiedPush servers phones may register
+    /// endpoints on (decision 16). Declared, because the server POSTs
+    /// wherever an endpoint points. Empty: push is off.
+    pub push_hosts: Vec<String>,
 }
 
 /// Who must sign in with a second factor (decision 32). Anyone may turn it
@@ -98,6 +102,7 @@ impl Config {
                     v.parse().map_err(|_| anyhow::anyhow!("CALZONE_DEFAULT_TIMEZONE {v:?} is not an IANA zone"))?
                 }
             },
+            push_hosts: crate::push::parse_hosts(var("CALZONE_PUSH_HOSTS").as_deref())?,
         })
     }
 }
