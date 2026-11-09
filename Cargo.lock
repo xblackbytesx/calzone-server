@@ -346,7 +346,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-client"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "calzone-core",
  "chrono",
@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-core"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "calcard",
  "chrono",
@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-dav"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "calzone-core",
  "chrono",
@@ -383,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-ffi"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "calzone-client",
  "calzone-core",
@@ -395,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "calzone-server"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
