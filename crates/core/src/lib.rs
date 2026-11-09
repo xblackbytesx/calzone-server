@@ -11,15 +11,19 @@
 //! - [`quickadd`]: "dentist thu 3pm" / "tandarts do 15u" into a draft event.
 //! - [`feed`]: a calendar as a published `.ics`, full or busy-only.
 //! - [`import`]: `.ics`/`.vcf` files split into objects and assembled back.
+//! - [`merge`]: the three-way merge of one object, field by field.
+//! - [`sync`]: the sync API's states, changes, batches and pushes.
 
 pub mod card;
 pub mod edit;
 pub mod feed;
 pub mod import;
 pub mod lines;
+pub mod merge;
 pub mod moment;
 pub mod object;
 pub mod quickadd;
 pub mod recur;
 pub mod split;
+pub mod sync;
 pub mod vtimezone;

@@ -137,6 +137,10 @@ Pure, in `calzone-core`, shared by the server and the phone.
   equals the other side), and the household corpus (fixtures only,
   counts reported).
 
+**Step 1 done 2026-11-09** (decision 46): `calzone_core::merge` and
+`calzone_core::sync`, 17 unit tests (3,000 generated edit pairs among
+them) and the household corpus, events and cards.
+
 ## Step 2: the server, sync API
 
 - **Device sign-in (decision 10):** the Devices page shows a one-time QR

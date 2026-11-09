@@ -104,8 +104,9 @@ accessibility and layout pass is done (decision 42; axe-core finds
 nothing on any page), README screenshots from a made-up household. Phase 2 is closed
 (2026-11-07); its household test (decision 12) moved to 4b, on the app.
 Phase 4a: spikes S4 (decision 44) and S5 (decision 45) decided
-2026-11-07 and 2026-11-09. Next: step 1, the core's sync types and merge
-(`docs/plan-phase-4.md`).
+2026-11-07 and 2026-11-09. Step 1 done 2026-11-09: the core's sync types
+and three-way merge (decision 46), checked on every household event and
+card. Next: step 2, the server's sync API (`docs/plan-phase-4.md`).
 
 ## Architecture
 
@@ -955,6 +956,44 @@ Settled 2026-11-06:
       sync silently, and an update that adds the permission does not ask
       for it. So the app has internet from its first version, and its
       settings say plainly when Network is off.
+46. **The three-way merge (phase 4 step 1, 2026-11-09): `merge` and
+    `sync` in the core.** `merge(base, mine, theirs)` takes three texts
+    (`None` is absent or deleted) and gives the merged text and what the
+    phone lost.
+    - **Units:** a component with a UID goes by UID and RECURRENCE-ID, so
+      each occurrence of a series merges on its own; a VTIMEZONE by TZID;
+      anything else (VALARM, a time zone's rules, unknown components) by
+      its text, so an edit there is a removal plus an addition and both
+      sides' versions survive.
+    - **Fields:** a field only one side changed takes that side's value.
+      Single-valued properties (a fixed list per iCalendar and vCard)
+      changed on both sides keep the server's lines and report the
+      phone's. DTSTART, DTEND, DURATION and DUE are one field, `TIME`, so
+      a start never pairs with the other side's end. Everything else,
+      unknown properties included, merges as a set of lines: both sides'
+      additions and removals apply. Lines are compared by their unfolded
+      text, and kept lines keep their source bytes.
+    - **Bookkeeping** (DTSTAMP, LAST-MODIFIED, CREATED, PRODID, REV,
+      SEQUENCE) is never a conflict: SEQUENCE takes the higher number, the
+      rest the server's line.
+    - **Deletes:** deleted on one side and unchanged on the other is
+      deleted. The phone deleting what the server changed keeps the
+      server's copy (reported as a lost delete); the server deleting what
+      the phone changed stays deleted (reported with the phone's text).
+      Server wins, as decision 15 says; the web's undo history is the way
+      back.
+    - **Layout:** the server's order; the phone's new properties go after
+      the server's, its new components at the end.
+    - **`sync`:** `State` (a collection's change-log position), `Change`
+      (name, revision, body or tombstone), `Batch` (since, state, changes,
+      more) and `Push` (name, base, body) with `Pushed` (revision, merged
+      body, conflicts), all serde, for step 2's JSON.
+    - **Checked** on the household corpus with the core's own edits on
+      both sides (185 events, 36 occurrence merges, 1,412 cards): nothing
+      else lost, no occurrence moved. Known limit: vCard groups
+      (`item1.TEL` with `item1.X-ABLABEL`) merge line by line, so two
+      sides adding the same new group name could pair a label with the
+      wrong number.
 
 ## Roadmap
 

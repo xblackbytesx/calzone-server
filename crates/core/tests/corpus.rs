@@ -500,3 +500,180 @@ fn private_corpus_card_edits_are_lossless() {
     eprintln!("household cards: {cards} edited losslessly ({with_phone} with phones, {with_photo} with photos)");
     assert!(cards > 0);
 }
+
+/// Phase 4 step 1: the three-way merge on every household object, with the
+/// core's own edits on both sides. An unchanged side gives the other side
+/// exactly; edits to different fields both survive; the same field keeps the
+/// server's value and reports the phone's; no other line is lost; nothing
+/// moves an occurrence. CONFIDENTIAL input: counts only.
+#[test]
+fn private_corpus_merges() {
+    use calzone_core::edit::{self, EventChange, Scope};
+    use calzone_core::merge::{Lost, merge};
+    use calzone_core::moment::Key;
+
+    let files = private_files("ics");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.ics");
+        return;
+    }
+    let now = dt("2026-11-06 12:00");
+    let later = dt("2026-11-06 12:05");
+    let (from, to) = (dt("2000-01-01 00:00"), dt("2030-01-01 00:00"));
+    let (mut events, mut occurrence_merges, mut conflicts) = (0, 0, 0);
+    let ed = |obj: &str, key: Option<Key>, scope: Scope, change: EventChange, at| {
+        edit::edit(obj, key, scope, &change, at, "n").ok().and_then(|r| r.updated)
+    };
+    for f in files {
+        let text = std::fs::read_to_string(&f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        for (i, obj) in objects_from_export(&text).iter().enumerate() {
+            if !obj.contains("BEGIN:VEVENT") {
+                continue;
+            }
+            events += 1;
+            let before = occurrence_starts(obj, from, to);
+            let mine =
+                ed(obj, None, Scope::All, EventChange { summary: Some("Mine".into()), ..Default::default() }, now)
+                    .unwrap_or_else(|| panic!("event {i}: title edit refused"));
+            let theirs =
+                ed(obj, None, Scope::All, EventChange { location: Some("Theirs".into()), ..Default::default() }, later)
+                    .unwrap_or_else(|| panic!("event {i}: place edit refused"));
+
+            for (m, t) in [(obj.as_str(), theirs.as_str()), (mine.as_str(), obj.as_str())] {
+                let r = merge(Some(obj), Some(m), Some(t)).unwrap_or_else(|e| panic!("event {i}: {e}"));
+                let want = if m == obj.as_str() { t } else { m };
+                assert!(r.text.as_deref() == Some(want) && r.conflicts.is_empty(), "event {i}: an unchanged side");
+            }
+
+            let r = merge(Some(obj), Some(&mine), Some(&theirs)).unwrap_or_else(|e| panic!("event {i}: {e}"));
+            assert!(r.conflicts.is_empty(), "event {i}: different fields reported a conflict");
+            let merged = r.text.unwrap_or_else(|| panic!("event {i}: merged into nothing"));
+            let doc = Document::parse(&merged).unwrap_or_else(|_| panic!("event {i}: merged text does not parse"));
+            object::inspect_calendar(&doc, &merged).unwrap_or_else(|e| panic!("event {i}: merged object refused: {e}"));
+            assert!(
+                master_value(&merged, "SUMMARY").as_deref() == Some("Mine")
+                    && master_value(&merged, "LOCATION").as_deref() == Some("Theirs"),
+                "event {i}: one side's field is missing"
+            );
+            let bookkeeping = ["SUMMARY", "LOCATION", "DTSTAMP", "LAST-MODIFIED", "SEQUENCE"];
+            assert_eq!(missing_lines(obj, &merged, &bookkeeping), 0, "event {i}: a merge lost a line");
+            assert!(occurrence_starts(&merged, from, to) == before, "event {i}: a merge moved occurrences");
+
+            let theirs_title =
+                ed(obj, None, Scope::All, EventChange { summary: Some("Theirs".into()), ..Default::default() }, later)
+                    .unwrap();
+            let r = merge(Some(obj), Some(&mine), Some(&theirs_title)).unwrap();
+            let lost_title =
+                r.conflicts.iter().any(|c| matches!(&c.lost, Lost::Field { field, .. } if field == "SUMMARY"));
+            assert!(lost_title, "event {i}: the same field was not reported");
+            assert!(
+                master_value(r.text.as_deref().unwrap(), "SUMMARY").as_deref() == Some("Theirs"),
+                "event {i}: server value"
+            );
+            conflicts += r.conflicts.len();
+
+            // Recurring: the phone changes one occurrence while the web
+            // renames the series.
+            if before.len() < 3 {
+                continue;
+            }
+            let exp = recur::expand(obj, from, to, chrono_tz::Europe::Amsterdam).unwrap();
+            let Some(rid) = exp.occurrences.iter().filter_map(|o| o.recurrence_id).nth(1) else { continue };
+            let key = match rid {
+                recur::When::Date(d) => Key::Date(d),
+                recur::When::Utc(t) | recur::When::Floating(t) => Key::Time(t),
+                recur::When::Zoned { local, .. } => Key::Time(local),
+            };
+            let Some(one) = ed(
+                obj,
+                Some(key),
+                Scope::This,
+                EventChange { summary: Some("Only this".into()), ..Default::default() },
+                now,
+            ) else {
+                continue;
+            };
+            occurrence_merges += 1;
+            let theirs =
+                ed(obj, None, Scope::All, EventChange { summary: Some("Renamed".into()), ..Default::default() }, later)
+                    .unwrap();
+            let r = merge(Some(obj), Some(&one), Some(&theirs)).unwrap_or_else(|e| panic!("event {i}: {e}"));
+            let merged = r.text.unwrap();
+            assert!(
+                merged.contains("SUMMARY:Only this") && merged.contains("SUMMARY:Renamed"),
+                "event {i}: occurrence merge"
+            );
+            assert!(occurrence_starts(&merged, from, to) == before, "event {i}: occurrence merge moved occurrences");
+            assert_eq!(missing_lines(obj, &merged, &bookkeeping), 0, "event {i}: occurrence merge lost a line");
+        }
+    }
+    eprintln!("household merges: events={events} occurrence_merges={occurrence_merges} reported={conflicts}");
+    assert!(events > 0);
+}
+
+/// A property's value on an object's master (or its first event).
+fn master_value(obj: &str, name: &str) -> Option<String> {
+    let doc = Document::parse(obj).unwrap();
+    let cal = &doc.components[0];
+    let master = cal
+        .components()
+        .find(|c| c.name == "VEVENT" && c.property("RECURRENCE-ID").is_none())
+        .or_else(|| cal.components().find(|c| c.name == "VEVENT"))?;
+    master.property(name).map(|l| l.value().to_string())
+}
+
+/// The same for every household card: a note on the phone and a company on
+/// the web both survive, and a phone number added on each side gives both.
+/// CONFIDENTIAL input: counts only.
+#[test]
+fn private_corpus_card_merges() {
+    use calzone_core::card::{self, CardChange, Kind, Typed};
+    use calzone_core::merge::merge;
+
+    let files = private_files("vcf");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.vcf");
+        return;
+    }
+    let (now, later) = (dt("2026-11-06 12:00"), dt("2026-11-06 12:05"));
+    let mut cards = 0;
+    for f in files {
+        let text = std::fs::read_to_string(&f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        let doc = Document::parse(&text).unwrap_or_else(|_| panic!("private vcf does not parse"));
+        for (i, c) in doc.components.iter().enumerate() {
+            let src = c.to_string();
+            let v = card::read(&src).unwrap_or_else(|e| panic!("card {i}: {e}"));
+            let with_phone = |n: &str| {
+                let mut phones = v.phones.clone();
+                phones.push(Typed { kind: Kind::Other, value: n.into() });
+                phones
+            };
+            let mine = CardChange {
+                note: Some("Mine".into()),
+                phones: Some(with_phone("+31 6 0000 0001")),
+                ..Default::default()
+            };
+            let theirs = CardChange {
+                org: Some("Theirs".into()),
+                phones: Some(with_phone("+31 6 0000 0002")),
+                ..Default::default()
+            };
+            let (Ok(m), Ok(t)) = (card::apply(&src, &mine, now), card::apply(&src, &theirs, later)) else { continue };
+            cards += 1;
+            let r = merge(Some(&src), Some(&m), Some(&t)).unwrap_or_else(|e| panic!("card {i}: {e}"));
+            assert!(r.conflicts.is_empty(), "card {i}: different fields reported a conflict");
+            let merged = r.text.unwrap();
+            let out = card::read(&merged).unwrap_or_else(|e| panic!("card {i}: merged card does not read: {e}"));
+            assert!(out.note == "Mine" && out.org == "Theirs", "card {i}: one side's field is missing");
+            let numbers: Vec<&str> = out.phones.iter().map(|p| p.value.as_str()).collect();
+            assert!(
+                numbers.contains(&"+31 6 0000 0001") && numbers.contains(&"+31 6 0000 0002"),
+                "card {i}: a phone is missing"
+            );
+            assert_eq!(out.phones.len(), v.phones.len() + 2, "card {i}: phones doubled or lost");
+            assert_eq!(missing_lines(&src, &merged, &["NOTE", "ORG", "REV"]), 0, "card {i}: a merge lost a line");
+        }
+    }
+    eprintln!("household card merges: {cards}");
+    assert!(cards > 0);
+}
