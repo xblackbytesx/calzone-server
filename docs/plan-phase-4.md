@@ -9,7 +9,9 @@ Done when (roadmap):
 - **4a:** Fossify and the phone's contacts run on CalZone's bridge on both
   phones, with DAVx5 uninstalled, for a few weeks of daily use: no
   duplicates, no lost edits, offline edits merge.
-- **4b:** the household uses the CalZone app daily for a few weeks.
+- **4b:** the household test (decision 12, `docs/household-test.md`,
+  moved here from phase 2) passes on the app, and the household uses it
+  daily for a few weeks.
 
 The contract is `AGENTS.md` (decisions 3, 5, 8, 9, 10, 14, 15, 16); this
 plan does not override it. The Android app lives in `/workspace/calzone`
@@ -17,12 +19,13 @@ with its own `AGENTS.md`, in the kagami, slopstream and wordwarz
 conventions (decision 1): Kotlin and Compose, no Play Services,
 GPL-3.0-or-later.
 
-## Before phase 4: moving in
+## Alongside 4a: moving in
 
-The household moves off Baikal onto CalZone with today's apps (DAVx5,
-Fossify, the web app) and the phase 2 household test is done. A few weeks
-of that prove the server, and the list of what annoys people in Fossify
-becomes the brief for 4b. Baikal keeps running until then (decision 19).
+The household moves off Baikal onto CalZone with today's apps (DAVx5 and
+Fossify on both phones) while 4a is built; it does not block the spikes.
+Weeks of that prove the server, the list of what annoys people in Fossify
+becomes the brief for 4b, and step 7's switch starts from it. Baikal
+keeps running until then (decision 19).
 
 ## In scope
 
@@ -94,6 +97,11 @@ calendar, the same as DAVx5 does without a tasks app.
   app targets a recent minimum SDK (picked here and recorded) instead of
   carrying workarounds for old versions.
 
+**S4 done 2026-11-07** (decision 44): rusqlite 0.32 next to sqlx, the
+household's month in 7 ms on a desk machine, Kotlin through UniFFI on
+the JVM, a 4.97 MB arm64 library, minSdk 35. The phone timings come in
+step 4.
+
 **S5, the system bridge (timebox 3 days).** Read DAVx5's synctools
 (GPLv3) first and borrow with attribution (decision 1).
 - A CalZone account type with a calendar and a contacts sync adapter,
@@ -107,6 +115,11 @@ calendar, the same as DAVx5 does without a tasks app.
   as a dirty row.
 - On GrapheneOS in the main profile, the phones' own setup. Private
   Space and work profiles are out: nobody keeps calendars there.
+
+**S5 done 2026-11-09** (decision 45): every Fossify edit reads back as a
+change (a deleted occurrence is a canceled exception), contacts are
+editable once the account declares its fields, and Android starts our
+sync within seconds of an edit, as long as the app may use the network.
 
 ## Step 1: the core, sync and merge
 
@@ -164,9 +177,13 @@ Pure, in `calzone-core`, shared by the server and the phone.
 - `/workspace/calzone` scaffolded with its own `AGENTS.md`.
 - Sign-in: scan the QR code (CameraX, ZXing), a camera-app deep link, or
   paste (the wordwarz options).
-- Syncing: WorkManager on a schedule, on a push, on "Sync now", and when
-  an app marks rows dirty. Unmetered or not does not matter here (small
-  changes).
+- Syncing: one engine run at a time, started by Android's sync adapter
+  (an edit in Fossify or Contacts, Fossify's refresh, daily) and by
+  WorkManager (a push, "Sync now"). A run that finds nothing to do is
+  cheap. Unmetered or not does not matter here (small changes).
+- Network: the app asks for internet from its first version; settings
+  say plainly when GrapheneOS's Network permission is off, because
+  Android then holds every sync without an error (decision 45).
 - Settings: the account, which calendars and address books this phone
   shows, last sync, conflicts (what changed, whose value won), sign out.
 - English and Dutch from the start (decision 35), dark by default
@@ -179,7 +196,11 @@ Pure, in `calzone-core`, shared by the server and the phone.
   access; events with recurrence, exceptions, my reminders; time zones
   from the event (floating times take the phone's zone, as in DAVx5).
 - Dirty and deleted rows become pending changes through the core edit
-  (title, times, place, notes, reminders, recurring scope).
+  (title, times, place, notes, reminders, recurring scope). A canceled
+  exception becomes an EXDATE; RRULE and DURATION are compared by
+  meaning, because Fossify rewrites them on any series edit; an event
+  may end when it starts. Writes select by our calendar ids (decision
+  45).
 - Moving an event between calendars in Fossify: a delete in one and a
   create in the other, sent together.
 - Record the recurrence exception (see "How the pieces fit") as a
@@ -189,6 +210,9 @@ Pure, in `calzone-core`, shared by the server and the phone.
 
 - Address books into ContactsContract: names, organization, phones,
   emails, addresses, birthday, notes, photo, groups (categories).
+- The account declares its fields (an EditSchema, DAVx5's list), or the
+  Contacts app treats it as read-only. Photos go in as the display-photo
+  file, the DAVx5 way (decision 45).
 - Edits in the system Contacts app become pending changes through the
   core card edit; what Android cannot hold stays in the stored vCard.
 - The dialer and messengers show names for incoming calls.
@@ -236,6 +260,8 @@ Contacts app (decision 14).
 
 ## Needed from the owner
 
-- Moving in and the phase 2 household test, before phase 4 starts.
+- Moving in (DAVx5 and Fossify onto CalZone) during 4a, at the latest
+  before step 7.
+- The household test, on the app in 4b.
 - Device checks during the spikes and steps 5 to 7 (a build to install
   and a short list of what to look at each time).

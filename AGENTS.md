@@ -101,8 +101,11 @@ Dutch and English, phone navigation (decision 40). 175 workspace tests.
 Step 6 done the same day: ICS feeds both ways (decision 41), migration
 `0009_feeds.sql`. 185 workspace tests. Step 7 under way: the
 accessibility and layout pass is done (decision 42; axe-core finds
-nothing on any page), README screenshots from a made-up household; the
-household test (decision 12) is the owner's and still open.
+nothing on any page), README screenshots from a made-up household. Phase 2 is closed
+(2026-11-07); its household test (decision 12) moved to 4b, on the app.
+Phase 4a: spikes S4 (decision 44) and S5 (decision 45) decided
+2026-11-07 and 2026-11-09. Next: step 1, the core's sync types and merge
+(`docs/plan-phase-4.md`).
 
 ## Architecture
 
@@ -888,11 +891,76 @@ Settled 2026-11-06:
       through the door (it cannot tell whose phone should ring).
     - The door is `/mcp`, Streamable HTTP, off unless `CALZONE_MCP=on`;
       the library is spike S3.
+44. **S4 result (phase 4, 2026-11-07): the phone's store is Rust and
+    SQLite, through UniFFI.** Measured with a throwaway crate, then
+    deleted.
+    - **rusqlite `0.32` with bundled SQLite.** It is the series on
+      `libsqlite3-sys 0.30`, which sqlx 0.8 keeps in the graph even unused
+      (Cargo checks `links` across optional dependencies). Both move
+      together when sqlx 0.9 (rustc 1.94) comes.
+    - **Shape:** the full text plus a projection (kind, UID, summary, time
+      bounds as UTC seconds) with a time index; a range comes from the
+      core's expansion (decision 9), contacts by name from the index.
+    - **Timings (desk machine, release):** the household's size (185
+      events, 1,412 contacts) fills in 74 ms, a month takes 7 ms, a week
+      5.5 ms, an edit with its pending change 5 ms; 0.6 MB on disk. Ten
+      times that: a month 77 ms, open-ended weekly series doing most of the
+      work. A phone is a few times slower, so the household's size is
+      fine; step 4 measures on the phones, and if a month passes 100 ms
+      there, 4b adds an occurrence cache refreshed on change.
+    - **Kotlin:** UniFFI 0.32 bindings (an object, `flat_error`) generated
+      from the unstripped debug library, compiled with kotlinc and run on
+      the JVM through JNA: writes, a recurring read, a typed refusal.
+    - **Android:** NDK r27d with cargo-ndk. The arm64 library is 4.97 MB
+      stripped (1.65 MB compressed in the APK; SQLite, calcard and the
+      time-zone database), x86_64 5.1 MB. It needs only libc, libm and
+      libdl, so no `libc++_shared.so` ships.
+    - **minSdk 35, target and compile 37** (kagami's). Both phones run
+      GrapheneOS on the newest Android; nothing older is supported.
+45. **S5 result (phase 4, 2026-11-09): the system bridge works on
+    GrapheneOS, and Android's own sync triggers start our sync.** Checked
+    with a throwaway APK on a Pixel (Android 17, main profile), then
+    deleted.
+    - **Account:** a CalZone account type with a calendar and a contacts
+      sync adapter, no Play Services.
+    - **What Fossify writes,** read back as changes:
+      - an edited event: a dirty row; reminders are their own rows;
+      - one occurrence changed: a new exception row (ORIGINAL_ID and
+        ORIGINAL_INSTANCE_TIME); the series row is untouched;
+      - one occurrence deleted: an exception row at the original time
+        with STATUS_CANCELED and no title, which the core turns into an
+        EXDATE;
+      - a series edit rewrites RRULE and DURATION in an equal form
+        (`INTERVAL=1;BYDAY=MO`, `P0DT1H0M0S`), so the bridge compares
+        by meaning, never by text;
+      - a new event may end when it starts.
+    - **Display:** exceptions, EXDATE, read-only access and calendar
+      colors show correctly in Fossify.
+    - **Writes to Events** select by `calendar_id IN (ours)`. Account
+      columns exist only in the read view, so filtering on them fails.
+    - **Contacts:** the account declares an EditSchema (DAVx5's list,
+      GPL-3.0, credited). Without one the Contacts app treats the account
+      as read-only: it saves edits as a new contact in another account
+      and joins the two, and crashes when ours is chosen. Photos are
+      written the DAVx5 way (the display-photo file, wait for the
+      provider, clear the dirty mark it sets). Edits come back as dirty
+      rows, deletes as DELETED; the dialer shows the names.
+    - **Triggers:** Android runs our adapter with `upload` within seconds
+      of an edit in Fossify or Contacts, on Fossify's refresh, on our own
+      request, and daily. It merges repeated requests, so a sync that
+      runs twice must do no harm. The adapter only starts the engine;
+      push and the schedule start it too (step 4).
+    - **Network:** Android starts a sync only when the app can reach the
+      network. With GrapheneOS's Network permission off it holds every
+      sync silently, and an update that adds the permission does not ask
+      for it. So the app has internet from its first version, and its
+      settings say plainly when Network is off.
 
 ## Roadmap
 
-Order (settled 2026-11-07): 1, 2, then moving in (off Baikal onto CalZone
-with DAVx5 and Fossify, plus the phase 2 household test), 4a, 4b, 3, 5.
+Order (settled 2026-11-07): 1, 2, 4a (with moving in off Baikal onto
+CalZone with DAVx5 and Fossify alongside it), 4b, 3, 5. The household test
+of decision 12 moved from phase 2 to 4b: it is done on the app.
 The server only matters if the household lives in it, so the app comes
 before Hermes; and 4a's new sync is proven under Fossify before CalZone's
 own screens are built on it. Phase numbers stay as they are.
@@ -903,7 +971,7 @@ own screens are built on it. Phase numbers stay as they are.
 | 2 | sharing UI, per-user layer UI, the calendar and contacts web app, ICS publishing and subscriptions | (new) | two people share a calendar, and the web app passes decision 12 |
 | 3 | MCP door, assistant accounts, MCP access per collection | external caldav-mcp | Hermes reads and writes within what it was given only |
 | 4a | merge in the core, sync API, push, `crates/client` + `crates/ffi`, Android store + system bridge | DAVx5 | Fossify and the phone's contacts run on CalZone's bridge with DAVx5 uninstalled, for a few weeks |
-| 4b | Android calendar UI, the app's own reminders, widgets | Fossify | daily use for a few weeks |
+| 4b | Android calendar UI, the app's own reminders, widgets | Fossify | the household test (decision 12) on the app, then daily use for a few weeks |
 | 5 | invitations, free/busy, birthdays calendar from contacts | | |
 
 ## Invariants

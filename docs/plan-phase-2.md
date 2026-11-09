@@ -283,8 +283,11 @@ Verified:
   a list of everyday tasks without help, and whatever trips them up gets
   fixed. Then the phase is done.
 
-**Accessibility pass done 2026-11-06** (decision 42); the household test
-is open.
+**Accessibility pass done 2026-11-06** (decision 42). **The household
+test moved to 4b (2026-11-07):** the household member it is for uses a
+computer only at work, so she tests on the phone app. The kit (setup, task
+cards, how to report) is `docs/household-test.md`, reworked for the app
+then. Phase 2 closes without it.
 
 Found while building:
 - White text on mid-tone event colors (3.4:1): the black-or-white choice
