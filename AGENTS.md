@@ -119,6 +119,9 @@ contacts bridge (decision 50), 247 workspace tests; device-untested. Step 7
 built 2026-11-09: 0.6.0 (the core the first app release pins), the app's
 release workflow and its `docs/switch-over.md`; the switch itself, on both
 phones, and a few weeks of daily use are the owner's, and close 4a.
+Phase 4b planned 2026-11-10 (`docs/plan-phase-4b.md`, a draft for the
+owner): spike S6 (reminders) first, then steps 1 to 7. S6 decided
+2026-11-11 (decision 51).
 
 ## Architecture
 
@@ -1248,6 +1251,47 @@ Settled 2026-11-06:
       removes exactly its line (and its label). Unit tests for types,
       labels, names, dates, groups, photos and new contacts; the client
       for edits and new contacts.
+51. **S6 result (phase 4b, 2026-11-11): CalZone rings its own reminders,
+    from the core's occurrences, with exact alarms.** Checked with a
+    throwaway APK on a Pixel 10 Pro (Android 17, GrapheneOS), then
+    deleted.
+    - **Exact alarms work without asking:** `USE_EXACT_ALARM` is granted
+      to a calendar app; `setExactAndAllowWhileIdle`, `setAlarmClock` and
+      `setExact` all arrived to the second (a 1-minute window: 38 s
+      late), also as a snooze. The app uses `setExactAndAllowWhileIdle`:
+      `setAlarmClock` would show an alarm icon and put reminders in the
+      clock's "next alarm", next to the owner's real wake-up alarm. One
+      alarm is pending at a time, for the next due moment; when it rings,
+      every reminder due then is shown and the next one is set, so
+      Doze's limit on idle alarms never applies.
+    - **Reboots:** alarms are gone after a reboot. `LOCKED_BOOT_COMPLETED`
+      arrives at once, before the first unlock; the spike put its alarms
+      back then and they rang on time while the phone was still locked.
+      `BOOT_COMPLETED` arrives only at the first unlock (here 10 minutes
+      later). Before that unlock the store (credential-encrypted) cannot
+      be read, so the app keeps the next due times in device-protected
+      storage, **times only, never titles**: a reminder before the first
+      unlock says "a reminder at 09:00; unlock to see it", and is
+      replaced by the full one at unlock. On GrapheneOS that storage is
+      readable without the PIN, so no content goes there.
+    - **Android's own calendar reminders are not used.** The provider
+      broadcasts `EVENT_REMINDER` for the bridge's `Reminders` rows, but
+      leaves an alert it rang `scheduled` until some app dismisses it,
+      and broadcasts it again after a reboot: the spike saw a reminder
+      for midnight arrive at the next boot, nine hours late. Ringing from
+      the core instead keeps decision 9 (recurrence is the core's) and
+      works for calendars this phone hides from other apps. The bridge
+      still writes `Reminders` rows, so other apps show the bell; while
+      Fossify is installed it may ring as well, which ends when 4b's exit
+      removes it.
+    - **A plain notification,** high importance, category reminder, with
+      Snooze and Open. No full-screen intent (allowed on GrapheneOS, but
+      a reminder is not an alarm clock). The notification permission is
+      asked when the first reminder is set, not at sign-in.
+    - **Not yet seen on the phone:** a reminder after hours of Doze, and a
+      time zone change (`TIMEZONE_CHANGED` arrives for manifest
+      receivers, documented). Both are checked in step 5, the reminder
+      step.
 
 ## Roadmap
 

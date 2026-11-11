@@ -267,14 +267,9 @@ the guide is the app's `docs/switch-over.md`. The R8 release build was
 checked to build; it has not run on a phone yet. Open: the switch on both
 phones and the weeks of use.
 
-## 4b: the CalZone app (outline)
+## 4b: the CalZone app
 
-Planned in detail when 4a is done. Expected: agenda, day, week and month
-views with occurrences from the core; the event editor with the recurring
-scope and quick add (English and Dutch, the core parser); shared
-calendars shown by color and initials; my own reminders, delivered by
-the app; a widget; conflicts shown in place. Contacts stay in the system
-Contacts app (decision 14).
+Planned in detail in `docs/plan-phase-4b.md` (drafted 2026-11-10).
 
 ## Exit criteria (4a)
 
