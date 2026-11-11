@@ -1,9 +1,10 @@
 # CalZone
 
 Shared calendars and contacts for a household, self-hosted. A web app that
-is easy enough for everyone at home, and a CalDAV/CardDAV server so phones
-(DAVx5) and Thunderbird keep syncing as they always did. Built to replace
-Baikal.
+is easy enough for everyone at home, an
+[Android app](https://github.com/xblackbytesx/calzone) with its own
+calendar, and a CalDAV/CardDAV server so DAVx5 and Thunderbird keep
+syncing as they always did. Built to replace Baikal.
 
 [![CI](https://github.com/xblackbytesx/calzone-server/actions/workflows/ci.yml/badge.svg)](https://github.com/xblackbytesx/calzone-server/actions/workflows/ci.yml)
 [![Release](https://github.com/xblackbytesx/calzone-server/actions/workflows/release.yml/badge.svg)](https://github.com/xblackbytesx/calzone-server/actions/workflows/release.yml)
@@ -45,6 +46,14 @@ Baikal.
   Dutch), undo after every change, recurring edits for one, following or
   all occurrences, and a contacts book with search. English and Dutch,
   dark by default, works on a phone.
+- **An Android app**: [CalZone for Android](https://github.com/xblackbytesx/calzone)
+  signs in with a QR code from the Devices page and keeps everything on
+  the phone, offline included. It has its own calendar (month and days,
+  agenda, day, week and month), editing, reminders that ring on time,
+  search and widgets. It also puts your calendars and contacts in the
+  phone's other apps, replacing DAVx5. It syncs over the server's own
+  sync API, with instant updates through UnifiedPush (ntfy) when push
+  is set up.
 - **People, groups and sharing**: everyone has their own calendars and
   address books and shares them with a person or a group as "can view",
   "can edit" or "can edit and share".
@@ -73,8 +82,7 @@ Baikal.
   (required for admins, or for everyone), Argon2id passphrases, login
   throttling, no third-party scripts, fonts or analytics, a strict CSP.
 
-Coming next: scoped access for assistants and scripts (MCP), and an
-Android app.
+Coming next: scoped access for assistants and scripts (MCP).
 
 ## Deploy
 
