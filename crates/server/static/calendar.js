@@ -31,7 +31,12 @@
   var scopeDialog = document.getElementById("cal-scope");
   var toastEl = document.getElementById("cal-toast");
   var titleEl = document.getElementById("cal-title");
-  var VIEWS = ["listMonth", "timeGridDay", "timeGridWeek", "dayGridMonth"];
+  var mini = document.getElementById("cal-mini");
+  var main = document.getElementById("cal-main");
+  // "monthDays" is ours (decision 54): the small month over EventCalendar's
+  // month list. The rest are EventCalendar's own views.
+  var VIEWS = ["monthDays", "listMonth", "timeGridDay", "timeGridWeek", "dayGridMonth"];
+  function ecView(v) { return v === "monthDays" ? "listMonth" : v; }
 
   // ---- Helpers -------------------------------------------------------------
 
@@ -205,12 +210,13 @@
   }
 
   var params = new URLSearchParams(location.search);
-  var startView = VIEWS.indexOf(params.get("view")) >= 0 ? params.get("view") : (isPhone() ? "listMonth" : "timeGridWeek");
+  var startView = VIEWS.indexOf(params.get("view")) >= 0 ? params.get("view") : (isPhone() ? "monthDays" : "timeGridWeek");
+  var mode = startView;
   var startDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "") ? params.get("date") : ymd(new Date());
   var timeFormat = { hour: "numeric", minute: "2-digit", hour12: C.hour12 };
 
   var cal = EventCalendar.create(grid, {
-    view: startView,
+    view: ecView(startView),
     date: startDate,
     locale: C.locale,
     firstDay: C.first_day,
@@ -233,8 +239,28 @@
     selectLongPressDelay: 400,
     eventSources: [{
       events: function (info, ok, fail) {
-        api("GET", "/api/occurrences?from=" + ymd(info.start) + "&to=" + ymd(info.end)).then(function (r) {
-          if (r.ok) { ok(r.data.map(toEc)); } else { failed(r); fail(r); }
+        // The month list also loads the small month's outer weeks, so both
+        // come from one request; the list shows only its own month's days.
+        var from = ymd(info.start), to = ymd(info.end);
+        if (ecView(mode) === "listMonth") {
+          var weeks = monthGrid(info.start);
+          if (weeks[0][0] < from) from = weeks[0][0];
+          var after = addDays(weeks[weeks.length - 1][6], 1);
+          if (after > to) to = after;
+        }
+        api("GET", "/api/occurrences?from=" + from + "&to=" + to).then(function (r) {
+          if (r.ok) {
+            loaded = r.data;
+            ok(r.data.map(toEc));
+            renderMini();
+            // Open a newly shown month at the picked day; a reload after an
+            // edit leaves the list where it is.
+            var shownMonth = ymd(cal.getView().currentStart).slice(0, 7);
+            if (mode === "monthDays" && picked && scrolledFor !== shownMonth) {
+              scrolledFor = shownMonth;
+              setTimeout(function () { scrollList(picked, false); }, 0);
+            }
+          } else { failed(r); fail(r); }
         });
       }
     }],
@@ -278,13 +304,178 @@
     titleEl.textContent = v.title;
     var date = ymd(cal.getOption("date"));
     var url = new URL(location.href);
-    url.searchParams.set("view", v.type);
+    if (mode === "monthDays") {
+      // Keep the picked day while it is in the shown month, else the date
+      // the grid went to (today when it is in the month).
+      var month = date.slice(0, 7);
+      if (!picked || picked.slice(0, 7) !== month) picked = ymd(new Date()).slice(0, 7) === month ? ymd(new Date()) : month + "-01";
+      date = picked;
+    }
+    url.searchParams.set("view", mode);
     url.searchParams.set("date", date);
     history.replaceState(null, "", url);
     root.querySelectorAll("[data-view]").forEach(function (b) {
-      b.setAttribute("aria-pressed", b.getAttribute("data-view") === v.type ? "true" : "false");
+      b.setAttribute("aria-pressed", b.getAttribute("data-view") === mode ? "true" : "false");
     });
+    mini.hidden = mode !== "monthDays";
+    main.classList.toggle("month-days", mode === "monthDays");
+    renderMini();
   }
+
+  // ---- The small month (decision 54) -----------------------------------------
+
+  var loaded = [];
+  var scrolledFor = null;
+  var renderedMonth = null;
+  var picked = mode === "monthDays" ? startDate : null;
+  var miniDay = new Intl.DateTimeFormat(C.locale, { weekday: "long", day: "numeric", month: "long" });
+  var miniWeekday = new Intl.DateTimeFormat(C.locale, { weekday: "narrow" });
+
+  /** The weeks of the month around `d`, as "YYYY-MM-DD" days, starting on
+      the person's first day of the week. */
+  function monthGrid(d) {
+    var first = new Date(d.getFullYear(), d.getMonth(), 1);
+    var back = (first.getDay() - C.first_day + 7) % 7;
+    var day = new Date(first.getFullYear(), first.getMonth(), 1 - back);
+    var last = ymd(new Date(first.getFullYear(), first.getMonth() + 1, 0));
+    var weeks = [];
+    while (ymd(day) <= last) {
+      var week = [];
+      for (var i = 0; i < 7; i++) { week.push(ymd(day)); day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1); }
+      weeks.push(week);
+    }
+    return weeks;
+  }
+
+  /** The days an occurrence is on, within [from, to]: an all-day end is the
+      day after, and a timed end at midnight belongs to the day before. */
+  function daysOn(o, from, to) {
+    var start = o.start.slice(0, 10);
+    var last;
+    if (o.all_day) {
+      last = o.end ? addDays(o.end.slice(0, 10), -1) : start;
+    } else {
+      var end = o.end || o.start;
+      last = end.slice(0, 10);
+      if (last > start && end.slice(11, 16) === "00:00") last = addDays(last, -1);
+    }
+    if (last < start) last = start;
+    if (start < from) start = from;
+    if (last > to) last = to;
+    var out = [];
+    for (var d = start; d <= last && out.length < 42; d = addDays(d, 1)) out.push(d);
+    return out;
+  }
+
+  function renderMini() {
+    if (mode !== "monthDays") return;
+    var shown = cal.getView().currentStart;
+    var weeks = monthGrid(shown);
+    var from = weeks[0][0], to = weeks[weeks.length - 1][6];
+    var month = ymd(shown).slice(0, 7);
+    var today = ymd(new Date());
+    // Per day, each calendar once, all-day first, then by start.
+    var byDay = {}, legend = {}, legendOrder = [];
+    loaded.slice().sort(function (a, b) {
+      return (b.all_day - a.all_day) || (a.start < b.start ? -1 : a.start > b.start ? 1 : 0);
+    }).forEach(function (o) {
+      daysOn(o, from, to).forEach(function (d) {
+        var list = byDay[d] || (byDay[d] = []);
+        if (!list.some(function (x) { return x.collection === o.collection; })) list.push(o);
+        if (d.slice(0, 7) === month && !legend[o.collection]) { legend[o.collection] = o; legendOrder.push(o); }
+      });
+    });
+
+    var table = document.createElement("div");
+    table.className = "cal-mini-grid";
+    // A short fade when the month turns, not when a day is picked.
+    if (month !== renderedMonth) { table.classList.add("turn"); renderedMonth = month; }
+    table.setAttribute("role", "group");
+    table.setAttribute("aria-label", cal.getView().title);
+    weeks[0].forEach(function (d) {
+      var h = document.createElement("span");
+      h.className = "cal-mini-wd";
+      h.setAttribute("aria-hidden", "true");
+      var p = d.split("-");
+      h.textContent = miniWeekday.format(new Date(+p[0], +p[1] - 1, +p[2]));
+      table.appendChild(h);
+    });
+    weeks.forEach(function (week) {
+      week.forEach(function (d) {
+        var p = d.split("-");
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "cal-mini-day";
+        b.setAttribute("data-mini", d);
+        if (d.slice(0, 7) !== month) b.classList.add("out");
+        if (d === today) b.classList.add("today");
+        b.setAttribute("aria-pressed", d === picked ? "true" : "false");
+        var num = document.createElement("span");
+        num.className = "cal-mini-num";
+        num.textContent = String(+p[2]);
+        b.appendChild(num);
+        var dots = document.createElement("span");
+        dots.className = "cal-mini-dots";
+        var on = byDay[d] || [];
+        on.slice(0, 3).forEach(function (o) {
+          var dot = document.createElement("span");
+          dot.className = "cal-mini-dot";
+          dot.style.backgroundColor = o.color;
+          dots.appendChild(dot);
+        });
+        b.appendChild(dots);
+        var label = miniDay.format(new Date(+p[0], +p[1] - 1, +p[2]));
+        if (on.length) label += ": " + on.map(function (o) { return o.calendar; }).join(", ");
+        b.setAttribute("aria-label", label);
+        table.appendChild(b);
+      });
+    });
+
+    var key = document.createElement("ul");
+    key.className = "cal-mini-legend";
+    key.setAttribute("aria-hidden", "true");
+    legendOrder.forEach(function (o) {
+      var li = document.createElement("li");
+      var dot = document.createElement("span");
+      dot.className = "cal-mini-dot";
+      dot.style.backgroundColor = o.color;
+      var name = document.createElement("span");
+      name.textContent = o.calendar;
+      li.appendChild(dot);
+      li.appendChild(name);
+      key.appendChild(li);
+    });
+
+    mini.replaceChildren(table, key);
+  }
+
+  /** Show `d` in the list: its day, or the next day with something on it. */
+  function scrollList(d, smooth) {
+    var list = grid.querySelector(".ec-main");
+    if (!list) return;
+    var heads = list.querySelectorAll(".ec-day-head > time:first-child");
+    var target = null;
+    for (var i = 0; i < heads.length; i++) {
+      if (heads[i].getAttribute("datetime") >= d) { target = heads[i].closest(".ec-day"); break; }
+    }
+    var top = target ? target.offsetTop - list.offsetTop : list.scrollHeight;
+    var calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    list.scrollTo({ top: top, behavior: smooth && !calm ? "smooth" : "auto" });
+  }
+
+  function pick(d) {
+    var month = ymd(cal.getView().currentStart).slice(0, 7);
+    picked = d;
+    if (d.slice(0, 7) !== month) {
+      // A day of the next or previous month: go there; the list opens at
+      // it once that month has loaded.
+      cal.setOption("date", d);
+      return;
+    }
+    afterNavigate();
+    scrollList(d, true);
+  }
+
   afterNavigate();
 
   /** A drag or resize: ask the scope for a recurring event, send, and snap
@@ -646,17 +837,39 @@
 
   // ---- Buttons, keys, swipe -------------------------------------------------
 
-  function setView(v) { cal.setOption("view", v); }
+  function setView(v) {
+    // Leaving month and days: the other views open at the picked day.
+    if (mode === "monthDays" && v !== "monthDays" && picked) cal.setOption("date", picked);
+    mode = v;
+    if (v === "monthDays") { scrolledFor = null; if (!picked) picked = ymd(cal.getOption("date")); }
+    if (cal.getView().type === ecView(v)) { afterNavigate(); if (v === "monthDays") scrollList(picked, false); }
+    else cal.setOption("view", ecView(v));
+  }
+  /** Back or forward a page. Month and days keeps the picked day's place:
+      the 25th a month later (or the month's last day when it is shorter). */
+  function page(dir) {
+    if (mode !== "monthDays" || !picked) { if (dir > 0) cal.next(); else cal.prev(); return; }
+    var p = picked.split("-");
+    var last = new Date(+p[0], +p[1] - 1 + dir + 1, 0).getDate();
+    picked = ymd(new Date(+p[0], +p[1] - 1 + dir, Math.min(+p[2], last)));
+    cal.setOption("date", picked);
+  }
+  function goToday() {
+    var t = ymd(new Date());
+    if (mode === "monthDays") { pick(t); return; }
+    cal.setOption("date", new Date());
+  }
 
   function onClick(e) {
-    var b = e.target.closest("[data-cal], [data-view]");
+    var b = e.target.closest("[data-cal], [data-view], [data-mini]");
     if (!b) return;
+    if (b.hasAttribute("data-mini")) { pick(b.getAttribute("data-mini")); return; }
     var v = b.getAttribute("data-view");
     if (v) { setView(v); return; }
     switch (b.getAttribute("data-cal")) {
-      case "today": cal.setOption("date", new Date()); break;
-      case "prev": cal.prev(); break;
-      case "next": cal.next(); break;
+      case "today": goToday(); break;
+      case "prev": page(-1); break;
+      case "next": page(1); break;
       case "new": openNew({}); break;
       case "close": closePanel(); break;
       case "undo": undo(); break;
@@ -677,11 +890,11 @@
     var tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
     switch (e.key) {
-      case "t": cal.setOption("date", new Date()); break;
+      case "t": goToday(); break;
       case "n": if (C.calendars.length) openNew({}); break;
-      case "ArrowLeft": case "k": cal.prev(); break;
-      case "ArrowRight": case "j": cal.next(); break;
-      case "1": case "2": case "3": case "4": setView(VIEWS[+e.key - 1]); break;
+      case "ArrowLeft": case "k": page(-1); break;
+      case "ArrowRight": case "j": page(1); break;
+      case "1": case "2": case "3": case "4": case "5": setView(VIEWS[+e.key - 1]); break;
       default: return;
     }
     e.preventDefault();
@@ -689,15 +902,15 @@
 
   // Swipe left or right on touch to page; never while dragging an event.
   var sx = null, sy = 0, st = 0;
-  grid.addEventListener("pointerdown", function (e) {
+  main.addEventListener("pointerdown", function (e) {
     if (e.pointerType !== "touch" || e.target.closest(".ec-event")) { sx = null; return; }
     sx = e.clientX; sy = e.clientY; st = Date.now();
   });
-  grid.addEventListener("pointerup", function (e) {
+  main.addEventListener("pointerup", function (e) {
     if (sx === null) return;
     var dx = e.clientX - sx, dy = e.clientY - sy;
     sx = null;
-    if (Date.now() - st < 600 && Math.abs(dx) > 60 && Math.abs(dy) < 40) { if (dx < 0) cal.next(); else cal.prev(); }
+    if (Date.now() - st < 600 && Math.abs(dx) > 60 && Math.abs(dy) < 40) page(dx < 0 ? 1 : -1);
   });
 
   // ---- First use: the browser's time zone -----------------------------------

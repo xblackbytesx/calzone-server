@@ -12,6 +12,7 @@
       <h1 class="cal-title" id="cal-title">{{ nav.t.calendar_title }}</h1>
     </div>
     <div class="cal-views" role="group" aria-label="{{ nav.t.views }}">
+      <button type="button" class="compact" data-view="monthDays">{{ nav.t.view_month_days }}</button>
       <button type="button" class="compact" data-view="listMonth">{{ nav.t.view_agenda }}</button>
       <button type="button" class="compact" data-view="timeGridDay">{{ nav.t.view_day }}</button>
       <button type="button" class="compact" data-view="timeGridWeek">{{ nav.t.view_week }}</button>
@@ -36,7 +37,10 @@
       <a class="button quiet compact" href="/collections">+ {{ nav.t.new_calendar }}</a>
       <button type="button" class="quiet compact" data-cal="subscribe">+ {{ nav.t.subscribe }}</button>
     </aside>
-    <div id="cal-grid" class="cal-grid"></div>
+    <div id="cal-main" class="cal-main">
+      <div id="cal-mini" class="cal-mini" hidden></div>
+      <div id="cal-grid" class="cal-grid"></div>
+    </div>
   </div>
   <p class="hint cal-keys">{{ nav.t.shortcuts }}</p>
 </div>

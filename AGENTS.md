@@ -140,7 +140,11 @@ decisions 34 and 35), device-untested. 0.7.0 prepared 2026-11-11 for
 the owner's tag (the core of 4b steps 1, 5 and 6, which the app's v0.2.0
 pins; no new migrations), tagged by the owner with the app's v0.2.0.
 Step 7 under way: `docs/household-test.md` rewritten for the app; the
-owner runs it next.
+owner runs it next. 2026-11-11, between the test's preparations: the
+web's navigation became Calendar, Contacts and Settings (decision 53,
+0.7.1), and the web got the app's month and days view (decision 54,
+prepared as 0.8.0), checked in headless Chromium at 360, 390 and 1280
+pixels wide in English and Dutch.
 
 ## Architecture
 
@@ -729,7 +733,8 @@ Settled 2026-11-06:
       translated toolbar is wrapped around the EventCalendar grid:
       - today, back and forward, and the title;
       - agenda, day, week and month (phone default agenda, desk default
-        week);
+        week; since decision 54 month and days comes first and is the
+        phone default);
       - quick add, and "+".
       The view and date live in the URL.
     - **`static/calendar.js`** feeds the grid from `/api/occurrences`:
@@ -1384,6 +1389,44 @@ Settled 2026-11-06:
     are unchanged. The calendar's "make a calendar first" points to
     Settings. The README screenshots still show the old header. Released
     as 0.7.1 (web only; the app keeps `czCoreRef=v0.7.0`).
+54. **The web has the app's month and days view (2026-11-11, the owner's
+    request).** A small month over the month's list, as in the app (app
+    decision 33), first in the view switcher and the phone default; the
+    desk keeps week. EventCalendar (decision 26) still draws the list as
+    its own `listMonth`, unchanged and still vendored at the same pin;
+    the small month is ours (`static/calendar.js`, view `monthDays` in
+    the URL), plain buttons with at most three dots per day, one per
+    calendar, and under it the legend of the calendars with something
+    in the shown month. Rejected: a second EventCalendar instance for
+    the month (twice the rendering, and its month grid fought down to
+    dots) and our own list (duplicating what the vendored one does).
+    - **One request:** in the month list, the event source asks
+      `/api/occurrences` for the small month's whole weeks; the list
+      shows only its own month's days, so the outer days' dots come
+      free.
+    - **Picking a day** marks it, puts it in the URL and scrolls the
+      list to it, or to the next day with something on it. A day of the
+      neighboring month goes there. Back and forward keep the picked
+      day's place (the 25th a month later, or the shorter month's last
+      day); a month reached otherwise opens at today when it is in it,
+      else at its 1st. A reload after an edit
+      leaves the list where it is. Today, `t`, swipe and the arrows work
+      as in the other views; keys 1 to 5 pick the views.
+    - **Its one tie to EventCalendar's markup:** the list's day headings
+      carry `<time datetime="YYYY-MM-DD">` (`.ec-day-head`). If an
+      update drops that, picking a day stops scrolling and nothing else
+      breaks.
+    - **Layout:** stacked on a phone, the small month beside the list
+      from 48rem. The month turns with a 0.12 s fade, not with reduced
+      motion. On a 360px phone the header's gaps tighten so the gear
+      stays on the row.
+    - **Swipe fixed on the way:** Chromium claimed sideways swipes as a
+      pan and canceled the pointer, so swiping never paged any view.
+      `touch-action: pan-y pinch-zoom` on the calendar area (every
+      element, as the grid's scroll boxes start afresh) gives them to
+      the script; vertical scrolling and zoom stay the browser's.
+    Prepared as 0.8.0 (web only; no migrations; the app keeps
+    `czCoreRef=v0.7.0`).
 
 ## Roadmap
 

@@ -362,6 +362,8 @@ async fn the_calendar_page_and_its_panel() {
     assert_eq!(s, StatusCode::OK);
     assert!(page.contains(r#"<html lang="en" data-theme="dark">"#), "dark and English by default");
     assert!(page.contains("/static/event-calendar.min.js") && page.contains("data-view=\"timeGridWeek\""));
+    // Month and days (decision 54): first in the switcher, with its own small month.
+    assert!(page.contains(r#"data-view="monthDays">Month and days<"#) && page.contains(r#"id="cal-mini""#));
     assert!(page.contains("Add: dentist thu 3pm") && page.contains("&#34;first_day&#34;:1"));
     // The browser's language until set; a theme setting reaches <html>.
     anna.lang = Some("nl-NL,nl;q=0.9");
@@ -369,6 +371,7 @@ async fn the_calendar_page_and_its_panel() {
     let (_, page) = anna.page("/calendar").await;
     assert!(page.contains(r#"<html lang="nl" data-theme="light">"#));
     assert!(page.contains("Toevoegen: tandarts do 15u") && page.contains(">Vandaag<") && page.contains(">Agenda<"));
+    assert!(page.contains(">Maand en dagen<"));
     assert!(page.contains("&#34;locale&#34;:&#34;nl-NL&#34;"));
 
     // The panel for an occurrence: its own time, Anna's reminder only.

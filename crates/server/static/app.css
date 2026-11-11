@@ -231,6 +231,10 @@
   @container header (inline-size > 32rem) {
     .settings-label { display: inline; }
   }
+  /* A 360px phone in Dutch: tighter gaps keep the gear on the row. */
+  @container header (inline-size <= 24rem) {
+    .site-header-inner { column-gap: var(--space-2xs); }
+  }
   /* Settings' sections, under the header on every settings page. */
   .subnav { border-block-end: var(--hairline); background: var(--surface); }
   .subnav-inner {
@@ -468,6 +472,39 @@
   .cal-link-made input { font-family: var(--font-mono); font-size: var(--step--1); }
   .cal-cal-more { flex: none; }
   .cal-list-toggle[aria-expanded=true] { background: var(--accent-tint); color: var(--text); }
+
+  /* Month and days (decision 54): the small month over the month list on a
+     phone, beside it from a tablet up. */
+  .cal-main { display: grid; gap: var(--space-xs); grid-template-columns: minmax(0, 1fr); align-items: start; min-inline-size: 0; }
+  /* Sideways swipes page (calendar.js); without pan-y the browser claims
+     them as a pan and cancels the pointer before it lifts. Every element,
+     because the grid's own scroll boxes start touch-action afresh. */
+  .cal-main, .cal-main * { touch-action: pan-y pinch-zoom; }
+  @media (min-width: 48rem) {
+    .cal-main.month-days { grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); }
+  }
+  .cal-mini { display: grid; gap: var(--space-2xs); padding: var(--space-2xs); border: var(--hairline); border-radius: var(--radius-m); background: var(--surface); }
+  .cal-mini[hidden] { display: none; }
+  .cal-mini-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+  .cal-mini-wd { text-align: center; font-size: var(--step--1); color: var(--text-quiet); padding-block-end: var(--space-3xs); }
+  .cal-mini-day {
+    flex-direction: column; gap: 3px; min-block-size: 2.75rem; padding: var(--space-3xs) 0;
+    border: 0; background: transparent; font-weight: 400; font-variant-numeric: tabular-nums;
+  }
+  .cal-mini-day:hover { background: var(--surface-sunken); }
+  .cal-mini-day.out { color: var(--text-quiet); }
+  .cal-mini-day.out .cal-mini-dots { opacity: 0.6; }
+  .cal-mini-day.today .cal-mini-num { color: var(--accent); font-weight: 700; }
+  .cal-mini-day[aria-pressed=true] { background: var(--accent-tint); }
+  .cal-mini-dots { display: flex; gap: 2px; block-size: 6px; }
+  .cal-mini-dot { flex: none; display: inline-block; inline-size: 6px; block-size: 6px; border-radius: 50%; }
+  .cal-mini-legend { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-3xs) var(--space-xs); font-size: var(--step--1); color: var(--text-quiet); }
+  .cal-mini-legend:empty { display: none; }
+  .cal-mini-legend > li { display: flex; align-items: center; gap: var(--space-3xs); }
+  @media (prefers-reduced-motion: no-preference) {
+    .cal-mini-grid.turn { animation: cal-mini-in 0.12s ease-out; }
+  }
+  @keyframes cal-mini-in { from { opacity: 0.4; } }
   .sheet-section { display: grid; gap: var(--space-2xs); padding-block-start: var(--space-xs); border-block-start: var(--hairline); }
   .cal-keys { display: none; }
   @media (min-width: 64rem) { .cal-keys { display: block; } }
@@ -478,6 +515,9 @@
     .cal-new-text { display: none; }
     .cal-quick { order: 5; flex-basis: 100%; }
     .cal-grid { block-size: max(24rem, calc(100dvb - 15rem)); }
+    .cal-views { inline-size: 100%; }
+    .cal-views button { flex: 1 1 0; min-inline-size: min-content; padding-inline: var(--space-3xs); line-height: 1.1; }
+    .cal-main.month-days .cal-grid { block-size: max(16rem, calc(100dvb - 33rem)); }
   }
 
   /* What an event shows: time, title, and initials when someone else owns it. */

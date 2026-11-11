@@ -40,8 +40,8 @@ Baikal.
 
 <sub>Screenshots show a made-up household.</sub>
 
-- **A calendar and contacts web app**: agenda, day, week and month views
-  with drag to move and resize, quick add ("dentist thu 3pm", also in
+- **A calendar and contacts web app**: month and days, agenda, day, week
+  and month views with drag to move and resize, quick add ("dentist thu 3pm", also in
   Dutch), undo after every change, recurring edits for one, following or
   all occurrences, and a contacts book with search. English and Dutch,
   dark by default, works on a phone.
