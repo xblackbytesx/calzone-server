@@ -193,6 +193,12 @@ an agenda and a month widget (Glance 1.2.0). Device-untested.
 - A release, then Fossify uninstalled on both phones, then a few weeks
   of daily use. That is 4b's exit.
 
+**Step 7 under way 2026-11-11:** `docs/household-test.md` rewritten for
+the app (tasks 1 to 9 in the app, contacts in the Contacts app, task 10
+on the partner's phone, a new task 11 for search, Fossify removed after
+it passes); the app shows its version in Settings for reports. 0.7.0 and
+the app's v0.2.0 are tagged. Next: the owner runs the test.
+
 ## Exit criteria
 
 1. The suites pass: core and client tests on the corpus, the sync API's

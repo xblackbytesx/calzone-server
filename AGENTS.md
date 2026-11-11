@@ -138,8 +138,9 @@ end or fixed triggers; FFI `reminders`), device-untested. Step 6 done
 and opening events from other apps, and two Glance widgets (app
 decisions 34 and 35), device-untested. 0.7.0 prepared 2026-11-11 for
 the owner's tag (the core of 4b steps 1, 5 and 6, which the app's v0.2.0
-pins; no new migrations). Next: step 7, the household test and the
-release.
+pins; no new migrations), tagged by the owner with the app's v0.2.0.
+Step 7 under way: `docs/household-test.md` rewritten for the app; the
+owner runs it next.
 
 ## Architecture
 
