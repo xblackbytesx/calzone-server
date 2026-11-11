@@ -1372,6 +1372,18 @@ Settled 2026-11-06:
       came from a split, so other people's series-wide reminders stay
       with the old series (the web carries them over, decision 37).
       Fixed when it matters, in the server's upload.
+53. **The web's navigation is Calendar, Contacts and Settings (2026-11-11,
+    the owner's request), as in the phone app.** The header holds the
+    brand, Calendar and Contacts, and a gear "Settings" (its word only
+    where there is room) on one row; the "More" menu is gone. Settings
+    is a hub: on every page behind it (`Nav::in_settings`: settings,
+    collections, devices, import, people) a row of tabs under the header
+    reads Account (the old Settings page), Calendars & address books,
+    Devices, Import & export and People (admins only), wrapping on a
+    phone. Log out moved to the bottom of Account. Pages and addresses
+    are unchanged. The calendar's "make a calendar first" points to
+    Settings. The README screenshots still show the old header. Released
+    as 0.7.1 (web only; the app keeps `czCoreRef=v0.7.0`).
 
 ## Roadmap
 

@@ -1,0 +1,11 @@
+{#- Settings' own sections (decision 53): wraps on a phone, every one in
+    sight. Log out is at the bottom of Account, as in the phone app. -#}
+<nav class="subnav" aria-label="{{ nav.t.nav_settings }}">
+  <div class="subnav-inner">
+    <a href="/settings" aria-current="{{ nav.on("settings") }}">{{ nav.t.nav_account }}</a>
+    <a href="/collections" aria-current="{{ nav.on("collections") }}">{{ nav.t.nav_manage }}</a>
+    <a href="/devices" aria-current="{{ nav.on("devices") }}">{{ nav.t.nav_devices }}</a>
+    <a href="/import" aria-current="{{ nav.on("import") }}">{{ nav.t.nav_import }}</a>
+    {% if nav.admin %}<a href="/admin/people" aria-current="{{ nav.on("people") }}">{{ nav.t.nav_people }}</a>{% endif %}
+  </div>
+</nav>

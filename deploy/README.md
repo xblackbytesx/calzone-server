@@ -20,7 +20,7 @@ backups) and `CALZONE_PUBLIC_URL`.
 |---|---|
 | `DOMAIN`, `SUBDOMAIN`, `CERT_RESOLVER` | Traefik host rule and certificate |
 | `DOCKER_ROOT` | host directory for the database (`$DOCKER_ROOT/calzone-server/database`) |
-| `CALZONE_VERSION` | image tag: `0.7.0`, `0.7` or `latest` |
+| `CALZONE_VERSION` | image tag: `0.7.1`, `0.7` or `latest` |
 | `CALZONE_PUBLIC_URL` | the address clients use |
 | `CALZONE_DAV` | `on` or `off`: the CalDAV/CardDAV door for other apps |
 | `CALZONE_COOKIE_SECURE` | `on`; `off` only for plain-http LAN use |
@@ -145,7 +145,7 @@ person's "Download everything" zip, which any calendar app can read.
 docker compose exec calzone-server-db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > calzone.sql
 ```
 
-Upgrades: set `CALZONE_VERSION` (pin a release, `0.7.0`, rather than
+Upgrades: set `CALZONE_VERSION` (pin a release, `0.7.1`, rather than
 `latest`), then `docker compose pull && docker compose up -d`. Migrations
 run at start; take a backup first. The server stops cleanly on
 `docker compose down`; an import cut off by a stop is marked interrupted

@@ -363,6 +363,15 @@ impl Nav {
     pub fn on(&self, section: &str) -> &'static str {
         if self.active == section { "page" } else { "false" }
     }
+
+    /// The gear lights up on every page behind Settings (decision 53).
+    pub fn in_settings(&self) -> &'static str {
+        if matches!(self.active, "settings" | "collections" | "devices" | "import" | "people") {
+            "page"
+        } else {
+            "false"
+        }
+    }
 }
 
 pub fn html(t: impl askama::Template) -> Page {

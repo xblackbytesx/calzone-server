@@ -183,10 +183,8 @@
   /* Compact still meets the tap height; it only loses horizontal room and size. */
   .compact { padding-inline: var(--space-xs); font-size: var(--step--1); }
 
-  /* Site header: brand and account on one row (the account wraps under the
-     brand at big text sizes), the sections on the next; all three on one row
-     once the header is wide enough. The query is needed because the sections
-     scroll, so their min-content never forces a wrap by itself. */
+  /* Site header: the brand, Calendar and Contacts, and the Settings gear,
+     on one row (decision 53); it wraps only at big text sizes. */
   .site-header {
     container: header / inline-size;
     position: sticky;
@@ -207,54 +205,44 @@
   }
   .brand { margin-inline-end: auto; color: var(--text); font-weight: 800; font-size: var(--step-1); letter-spacing: -0.01em; }
   .sections {
-    order: 1;
-    flex: 1 1 100%;
+    flex: 1 1 auto;
     display: flex;
     align-items: center;
     gap: var(--space-3xs);
-    /* Wraps on a phone instead of scrolling: every section stays in sight
-       (decision 12), and there are only a handful. */
-    flex-wrap: wrap;
     padding-block: var(--space-3xs);
   }
-  .sections a, .account a {
+  .sections a, .settings-link, .subnav a {
     display: inline-flex;
     align-items: center;
+    gap: 0.4em;
     min-block-size: var(--tap);
     padding-inline: var(--space-2xs);
     border-radius: var(--radius-s);
     color: var(--text-quiet);
     white-space: nowrap;
   }
-  .sections a:hover, .account a:hover { background: var(--surface-sunken); color: var(--text); }
-  .sections a[aria-current=page], .account a[aria-current=page] { background: var(--accent-tint); color: var(--text); font-weight: 600; }
-  .account { display: flex; align-items: center; gap: var(--space-3xs); }
-  .account a { max-inline-size: min(16rem, 45cqi); overflow: hidden; text-overflow: ellipsis; }
-  .account button { white-space: nowrap; }
-  @container header (inline-size > 52rem) {
-    .sections { order: 0; flex: 1 1 0; }
+  .sections a:hover, .settings-link:hover, .subnav a:hover { background: var(--surface-sunken); color: var(--text); }
+  .sections a[aria-current=page], .settings-link[aria-current=page], .subnav a[aria-current=page] {
+    background: var(--accent-tint); color: var(--text); font-weight: 600;
   }
-  /* Phone: Calendar and Contacts, the rest behind "More". */
-  .sections-wide { display: none; }
-  .sections-more { position: relative; }
-  .sections-more > summary {
-    display: inline-flex; align-items: center; min-block-size: var(--tap); padding-inline: var(--space-2xs);
-    border-radius: var(--radius-s); color: var(--text-quiet); cursor: pointer; list-style: none;
+  /* The gear: its word only where there is room (decision 53). */
+  .settings-link svg { inline-size: 1.25em; block-size: 1.25em; flex: none; }
+  .settings-label { display: none; }
+  @container header (inline-size > 32rem) {
+    .settings-label { display: inline; }
   }
-  .sections-more > summary::-webkit-details-marker { display: none; }
-  .sections-more > summary::after { content: "▾"; margin-inline-start: 0.3em; font-size: 0.8em; }
-  .sections-more[open] > summary { background: var(--surface-sunken); color: var(--text); }
-  .sections-menu {
-    /* Opens from the button's end, so it stays on a phone's screen. */
-    position: absolute; z-index: 40; inset-block-start: calc(100% + var(--space-3xs)); inset-inline-end: 0;
-    display: grid; min-inline-size: 14rem; padding: var(--space-3xs); border: var(--hairline); border-radius: var(--radius-m);
-    background: var(--surface); box-shadow: 0 0.5rem 1.5rem color-mix(in oklab, black 30%, transparent);
+  /* Settings' sections, under the header on every settings page. */
+  .subnav { border-block-end: var(--hairline); background: var(--surface); }
+  .subnav-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3xs);
+    max-inline-size: var(--page);
+    margin-inline: auto;
+    padding: var(--space-3xs) var(--gutter);
   }
-  .sections-menu a { white-space: nowrap; }
-  @container header (inline-size > 52rem) {
-    .sections-wide { display: contents; }
-    .sections-more { display: none; }
-  }
+  .settings-logout { margin-block-start: var(--space-l); display: flex; justify-content: center; }
 
   /* Pages. */
   .page {

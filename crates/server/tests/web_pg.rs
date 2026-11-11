@@ -877,9 +877,21 @@ async fn every_page_in_dutch_and_preferences() {
     let r = bob.get("/admin/people").await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
     assert!(r.body.contains("Only an admin can do that."));
-    // The phone menu holds the rest of the sections.
+    // Calendar and Contacts in the bar, the rest behind Settings (decision 53).
     let s = anna.get("/calendar").await.body;
-    assert!(s.contains("<summary>Meer</summary>") && s.contains("class=\"sections-menu\""));
+    assert!(s.contains("class=\"settings-link\"") && s.contains(">Instellingen<"));
+    assert!(
+        !s.contains("class=\"subnav\"") && !s.contains("href=\"/devices\""),
+        "settings' sections stay behind the gear"
+    );
+    let s = anna.get("/devices").await.body;
+    assert!(
+        s.contains("class=\"subnav\"") && s.contains("href=\"/admin/people\"") && !s.contains("action=\"/logout\"")
+    );
+    assert!(anna.get("/settings").await.body.contains("class=\"settings-logout\""), "log out at the bottom of Account");
+    assert!(s.contains("class=\"settings-link\" href=\"/settings\" aria-current=\"page\""));
+    let s = bob.get("/settings").await.body;
+    assert!(s.contains("class=\"subnav\"") && !s.contains("href=\"/admin/people\""), "People only for admins");
     db.drop().await;
 }
 
