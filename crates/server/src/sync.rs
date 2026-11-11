@@ -9,6 +9,8 @@
 //! - `GET /sync/v1/collections`: what the person can see, with their view.
 //! - `GET /sync/v1/collections/{id}/changes?since=N&limit=M`: a batch.
 //! - `POST /sync/v1/collections/{id}/changes`: the phone's edits, merged.
+//! - `PUT /sync/v1/collections/{id}/mine`: the person's own view of it
+//!   (name, color, hidden, order, default reminder), as the web sets it.
 //!
 //! Errors are `{"error": "...", "code": "..."}`; the app branches on the
 //! code only.
@@ -21,7 +23,7 @@ use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use calzone_core::sync::{Account, Answer, Batch, Collections, SignedIn, Upload};
+use calzone_core::sync::{Account, Answer, Batch, Collections, Mine, SignedIn, Upload};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -45,6 +47,7 @@ pub fn routes() -> Router<AppState> {
         .route("/sync/v1/push", put(register_push).delete(unregister_push))
         .route("/sync/v1/collections", get(collections))
         .route("/sync/v1/collections/{id}/changes", get(changes).post(upload))
+        .route("/sync/v1/collections/{id}/mine", put(set_mine))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
@@ -260,4 +263,18 @@ async fn upload(
         tracing::info!(rejected = answer.rejected.len(), "sync: edits refused");
     }
     Ok(Json(answer))
+}
+
+/// The person's own view of a collection, replaced as a whole (decision 8).
+/// Their other phones and the web hear of it through push.
+async fn set_mine(
+    State(st): State<AppState>,
+    phone: Phone,
+    Path(id): Path<String>,
+    body: Result<Json<Mine>, JsonRejection>,
+) -> Result<StatusCode, SyncError> {
+    let Json(m) = body?;
+    let id = collection_id(&id)?;
+    domain::sync::set_mine(&st.pool, phone.actor(), id, &m).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

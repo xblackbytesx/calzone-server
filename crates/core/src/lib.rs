@@ -13,6 +13,7 @@
 //! - [`import`]: `.ics`/`.vcf` files split into objects and assembled back.
 //! - [`merge`]: the three-way merge of one object, field by field.
 //! - [`sync`]: the sync API's states, changes, batches and pushes.
+//! - [`view`]: the calendar as a person sees it, for the web and the phone.
 
 pub mod android;
 pub mod android_contacts;
@@ -28,4 +29,5 @@ pub mod quickadd;
 pub mod recur;
 pub mod split;
 pub mod sync;
+pub mod view;
 pub mod vtimezone;

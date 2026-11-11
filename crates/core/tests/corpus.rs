@@ -850,3 +850,56 @@ fn private_contacts_through_android() {
     );
     assert!(shown > 0);
 }
+
+/// Phase 4b's screens on the household corpus: every event reads into the
+/// event sheet, a busy month expands in well under a frame, and how many
+/// zoned series carry a UTC `UNTIL` (recur's fix 5). Counts only.
+#[test]
+fn private_calendar_through_the_screens() {
+    use calzone_core::view;
+    let files = private_files("ics");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.ics");
+        return;
+    }
+    let ams = chrono_tz::Europe::Amsterdam;
+    let mut objects = Vec::new();
+    for f in files {
+        let text = std::fs::read_to_string(&f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        // As the importer stores them: each with only the zones it uses.
+        let file =
+            calzone_core::import::split_calendar(&text).unwrap_or_else(|_| panic!("private export does not split"));
+        objects.extend(file.objects);
+    }
+    let (mut events, mut zoned_utc_until) = (0, 0);
+    for (i, obj) in objects.iter().enumerate() {
+        let doc = Document::parse(obj).unwrap_or_else(|_| panic!("object {i}: does not parse"));
+        let Some(ev) = doc.components[0].components().find(|c| c.name == "VEVENT") else { continue };
+        events += 1;
+        assert!(view::detail(obj, None, ams).is_some(), "object {i}: the event sheet cannot read it");
+        let zoned = ev.property("DTSTART").is_some_and(|l| l.param("TZID").is_some() && !l.value().ends_with('Z'));
+        let utc_until = ev.property("RRULE").is_some_and(|l| {
+            l.value().split(';').any(|p| p.to_ascii_uppercase().starts_with("UNTIL=") && p.ends_with(['Z', 'z']))
+        });
+        if zoned && utc_until {
+            zoned_utc_until += 1;
+        }
+    }
+    // Every month of 2026; the slowest one is what a phone would feel.
+    let mut slowest = std::time::Duration::ZERO;
+    let mut most = 0;
+    for m in 1..=12 {
+        let from = dt(&format!("2026-{m:02}-01 00:00"));
+        let to = if m == 12 { dt("2027-01-01 00:00") } else { dt(&format!("2026-{:02}-01 00:00", m + 1)) };
+        let started = std::time::Instant::now();
+        let n: usize = objects.iter().map(|o| view::occurrences(o, from, to, ams).len()).sum();
+        slowest = slowest.max(started.elapsed());
+        most = most.max(n);
+    }
+    eprintln!(
+        "private corpus through the screens: events={events} zoned_series_with_utc_until={zoned_utc_until} \
+         busiest_month_occurrences={most} slowest_month_ms={} (every object expanded, no store index; build profile decides)",
+        slowest.as_millis()
+    );
+    assert!(events > 0);
+}

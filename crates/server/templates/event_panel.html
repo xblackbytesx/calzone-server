@@ -24,6 +24,13 @@
           <option value="monthly"{% if d.repeat == "monthly" %} selected{% endif %}>{{ t.repeat_monthly }}</option>
           <option value="yearly"{% if d.repeat == "yearly" %} selected{% endif %}>{{ t.repeat_yearly }}</option>
         </select></label>
+      <fieldset class="when" data-repeat-end{% if d.repeat == "none" || d.repeat == "custom" %} hidden{% endif %}><legend>{{ t.repeat_stops }}</legend>
+        <div class="field-row"><select name="repeat_end" aria-label="{{ t.repeat_stops }}">
+            <option value="never"{% if repeat_end == "never" %} selected{% endif %}>{{ t.repeat_never }}</option>
+            <option value="until"{% if repeat_end == "until" %} selected{% endif %}>{{ t.repeat_on_day }}</option>
+            <option value="count"{% if repeat_end == "count" %} selected{% endif %}>{{ t.repeat_after }}</option>
+          </select><input type="date" name="repeat_until" value="{{ d.repeat_until }}" aria-label="{{ t.repeat_stops }}: {{ t.date }}"{% if repeat_end != "until" %} hidden{% endif %}><input type="number" name="repeat_count" value="{{ d.repeat_count }}" min="1" max="1000" inputmode="numeric" aria-label="{{ t.repeat_times }}"{% if repeat_end != "count" %} hidden{% endif %}></div>
+      </fieldset>
       {% if new %}<label class="field">{{ t.calendar }}
         <select name="collection">{% for c in calendars %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>{% endif %}
       <label class="field">{{ t.location }} <input type="text" name="location" value="{{ d.location }}" maxlength="500"></label>

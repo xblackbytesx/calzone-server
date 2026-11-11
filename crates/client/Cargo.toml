@@ -12,6 +12,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono-tz = "0.10"
 # 0.32 is the series on libsqlite3-sys 0.30, which sqlx 0.8 keeps in the
 # graph (Cargo checks `links` across optional dependencies). Both move
 # together when sqlx 0.9 comes (decision 44). Bundled: the phone's own

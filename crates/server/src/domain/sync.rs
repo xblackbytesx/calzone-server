@@ -29,6 +29,19 @@ fn wire_access(a: Access) -> wire::Access {
     }
 }
 
+/// Replace the actor's own view of a collection they can see (the web's
+/// calendar settings sheet does the same).
+pub async fn set_mine(pool: &PgPool, actor: Actor, collection: Uuid, m: &wire::Mine) -> Result<()> {
+    let p = prefs::CalendarPrefs {
+        color: m.color.clone(),
+        display_name: m.name.clone(),
+        hidden: m.hidden,
+        sort_order: m.order,
+        default_alarm: m.default_alarm,
+    };
+    prefs::set_calendar_prefs(pool, actor, collection, &p).await
+}
+
 /// Every calendar and address book the actor can see, with their own view.
 pub async fn collections(pool: &PgPool, actor: Actor) -> Result<wire::Collections> {
     let mut all = collections::visible(pool, actor, CollectionKind::Calendar).await?;

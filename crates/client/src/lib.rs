@@ -13,10 +13,14 @@
 //!   Android's. The engine only says what to send.
 //! - [`bridge`]: Android's calendar: rows for a stored event, Android's
 //!   edits as pending edits (decision 49).
+//! - [`calendar`]: CalZone's own calendar screens: occurrences, the event
+//!   sheet, edits with the recurring scope and Undo, quick add, and the
+//!   person's own view of each calendar (decision 52).
 //!
 //! Talks to the server only through the sync API (`/sync/v1`).
 
 pub mod bridge;
+pub mod calendar;
 pub mod engine;
 pub mod link;
 pub mod store;

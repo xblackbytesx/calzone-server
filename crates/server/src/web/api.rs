@@ -9,7 +9,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use calzone_core::edit::Scope;
 use calzone_core::moment::Key;
-use calzone_core::quickadd::{self, QuickWhen};
+use calzone_core::quickadd;
+use calzone_core::view::{self, QuickDraft};
 use chrono::{NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
@@ -18,7 +19,7 @@ use uuid::Uuid;
 use super::i18n;
 use super::session::ApiUser;
 use crate::AppState;
-use crate::domain::events::{self, EventInput, GridEvent, Saved, TimeInput};
+use crate::domain::events::{self, EventInput, GridEvent, Repeat, Saved, TimeInput};
 use crate::domain::prefs::{self, CalendarPrefs, SettingsChange};
 use crate::domain::{CollectionKind, DomainError, collections};
 
@@ -109,6 +110,9 @@ pub struct ChangeBody {
     end: Option<String>,
     #[serde(default, deserialize_with = "tri")]
     rrule: Option<Option<String>>,
+    /// One of the panel's repeats with its end; `null`: no longer repeats.
+    #[serde(default, deserialize_with = "tri")]
+    repeat: Option<Option<Repeat>>,
     alarms: Option<Vec<i64>>,
 }
 
@@ -122,6 +126,9 @@ impl ChangeBody {
         if self.alarms.as_ref().is_some_and(|a| a.len() > 10 || a.iter().any(|m| !(-1440..=40_320).contains(m))) {
             return Err(ApiError::bad("Up to 10 reminders, up to four weeks before."));
         }
+        if self.repeat.flatten().is_some_and(|r| r.count.is_some_and(|n| !(1..=1000).contains(&n))) {
+            return Err(ApiError::bad("Repeat 1 to 1000 times."));
+        }
         Ok(EventInput {
             summary: self.summary.clone(),
             location: self.location.clone(),
@@ -129,6 +136,7 @@ impl ChangeBody {
             start: time(&self.start, "start")?,
             end: time(&self.end, "end")?,
             rrule: self.rrule.clone(),
+            repeat: self.repeat,
             alarms: self.alarms.clone(),
         })
     }
@@ -178,16 +186,8 @@ pub async fn update(
 ) -> ApiResult<Saved> {
     // Only reminders: the person's own layer, for every occurrence, also on
     // a calendar they can only view (no scope, no shared change).
-    let c = &b.change;
-    if let Some(alarms) = &c.alarms
-        && c.summary.is_none()
-        && c.location.is_none()
-        && c.description.is_none()
-        && c.start.is_none()
-        && c.end.is_none()
-        && c.rrule.is_none()
-    {
-        b.change.input()?;
+    let input = b.change.input()?;
+    if let Some(alarms) = input.reminders_only() {
         return Ok(Json(events::update_reminders(&st.pool, u.id(), collection, &name, &b.etag, alarms).await?));
     }
     let (tz, _) = viewer(&st, u.id()).await?;
@@ -199,7 +199,7 @@ pub async fn update(
         &b.etag,
         instance(b.instance.as_deref())?,
         scope(b.scope.as_deref())?,
-        &b.change.input()?,
+        &input,
         tz,
         now(),
     )
@@ -256,15 +256,6 @@ pub struct QuickBody {
     text: String,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
-pub struct QuickDraft {
-    title: String,
-    all_day: bool,
-    /// Viewer-local, like the grid's; `None` when no day or time was found.
-    start: Option<String>,
-    end: Option<String>,
-}
-
 /// `POST /api/quickadd`: "dentist thu 3pm" read in the person's language
 /// and zone. Only reads; the page creates the event with `POST
 /// /api/events` (or opens the form when there is no time).
@@ -280,19 +271,7 @@ pub async fn quickadd(
     let (tz, s) = viewer(&st, u.id()).await?;
     let lang = i18n::lang(s.language.as_deref(), &headers);
     let local_now = tz.from_utc_datetime(&now()).naive_local();
-    let d = quickadd::parse(&b.text, lang, local_now).ok_or_else(|| ApiError::bad("Add a title."))?;
-    let (all_day, start, end) = match d.when {
-        None => (false, None, None),
-        Some(QuickWhen::Days { start, end }) => {
-            (true, Some(start.format("%Y-%m-%d").to_string()), Some(end.format("%Y-%m-%d").to_string()))
-        }
-        Some(QuickWhen::Time { start, end }) => (
-            false,
-            Some(start.format("%Y-%m-%dT%H:%M:%S").to_string()),
-            Some(end.format("%Y-%m-%dT%H:%M:%S").to_string()),
-        ),
-    };
-    Ok(Json(QuickDraft { title: d.title, all_day, start, end }))
+    Ok(Json(view::quick_draft(&b.text, lang, local_now).ok_or_else(|| ApiError::bad("Add a title."))?))
 }
 
 #[derive(Serialize)]

@@ -1,7 +1,9 @@
 //! The phone's store: one SQLite file (decision 44's shape).
 //!
 //! - `collections`: what the person can see, as the server listed it, and
-//!   the change-log state this phone has applied (`NULL`: never synced).
+//!   the change-log state this phone has applied (`NULL`: never synced);
+//!   `mine` is the person's own view of it changed on this phone and not
+//!   yet on the server (schema 2), shown in place of the listed one.
 //! - `objects`: the full text as the person sees it (their own reminders
 //!   in it), its revision, and a projection (kind, UID, summary, UTC
 //!   bounds) for queries. Local edits show here at once.
@@ -73,6 +75,9 @@ CREATE TABLE local_changes (
     deleted    INTEGER NOT NULL
 );
 ";
+
+/// Schema 2 (phase 4b): the person's own view of a collection, changed here.
+const SCHEMA_2: &str = "ALTER TABLE collections ADD COLUMN mine TEXT;";
 
 /// A collection on this phone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -222,11 +227,13 @@ impl Store {
         match version {
             0 => {
                 conn.execute_batch(SCHEMA)?;
-                conn.pragma_update(None, "user_version", 1)?;
+                conn.execute_batch(SCHEMA_2)?;
             }
-            1 => {}
+            1 => conn.execute_batch(SCHEMA_2)?,
+            2 => {}
             v => return Err(Error::Input(format!("this store was written by a newer CalZone (schema {v})"))),
         }
+        conn.pragma_update(None, "user_version", 2)?;
         Ok(Store { conn: Mutex::new(conn) })
     }
 
@@ -276,15 +283,25 @@ impl Store {
     pub fn collections(&self) -> Result<Vec<StoredCollection>> {
         let conn = self.lock();
         let mut st = conn.prepare(
-            "SELECT c.info, c.state, (SELECT count(*) FROM pending p WHERE p.collection = c.id)
+            "SELECT c.info, c.state, (SELECT count(*) FROM pending p WHERE p.collection = c.id), c.mine
              FROM collections c ORDER BY c.rowid",
         )?;
-        let rows =
-            st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, u32>(2)?)))?;
+        let rows = st.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<i64>>(1)?,
+                r.get::<_, u32>(2)?,
+                r.get::<_, Option<String>>(3)?,
+            ))
+        })?;
         let mut out = Vec::new();
         for row in rows {
-            let (info, state, pending) = row?;
-            let info = serde_json::from_str(&info).map_err(|e| Error::Input(e.to_string()))?;
+            let (info, state, pending, mine) = row?;
+            let mut info: wire::Collection = serde_json::from_str(&info).map_err(|e| Error::Input(e.to_string()))?;
+            // Changed here and not yet on the server: shown already.
+            if let Some(m) = mine.and_then(|m| serde_json::from_str(&m).ok()) {
+                info.mine = m;
+            }
             out.push(StoredCollection { info, state, pending });
         }
         Ok(out)
@@ -394,6 +411,17 @@ impl Store {
     /// at once and waits as a pending edit. The text must parse and suit
     /// the collection; whether the person may make it is the server's call.
     pub fn edit(&self, collection: &str, name: &str, body: Option<&str>) -> Result<()> {
+        self.write_edit(collection, name, body, false)
+    }
+
+    /// An edit made in CalZone's own screens: like [`Store::edit`], and the
+    /// system bridge hears of it at once, so Android's calendar shows it
+    /// before the server has it (offline too).
+    pub fn edit_here(&self, collection: &str, name: &str, body: Option<&str>) -> Result<()> {
+        self.write_edit(collection, name, body, true)
+    }
+
+    fn write_edit(&self, collection: &str, name: &str, body: Option<&str>, mirror: bool) -> Result<()> {
         if name.is_empty() || name.len() > 255 || name.contains('/') || name.chars().any(char::is_control) {
             return Err(Error::Input(format!("{name:?} cannot name an object")));
         }
@@ -448,11 +476,74 @@ impl Store {
                 tx.execute("DELETE FROM objects WHERE collection = ?1 AND name = ?2", params![collection, name])?;
             }
         }
+        if mirror {
+            local_change(&tx, collection, Some(name), body.is_none())?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The person's own view of a collection (name, color, hidden, order,
+    /// default reminder), changed on this phone: shown at once, sent by the
+    /// next sync run. The bridge hears of it (the color and name show in
+    /// Android's calendar too).
+    pub fn set_mine(&self, collection: &str, mine: &wire::Mine) -> Result<()> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+        let json = serde_json::to_string(mine).expect("serializable");
+        let n = tx.execute("UPDATE collections SET mine = ?2 WHERE id = ?1", params![collection, json])?;
+        if n == 0 {
+            return Err(Error::Input(format!("no collection {collection}")));
+        }
+        local_change(&tx, collection, None, false)?;
         tx.commit()?;
         Ok(())
     }
 
     // --- what the engine does ---
+
+    /// Views changed here and not yet sent.
+    pub(crate) fn pending_mine(&self) -> Result<Vec<(String, wire::Mine)>> {
+        let conn = self.lock();
+        let mut st = conn.prepare("SELECT id, mine FROM collections WHERE mine IS NOT NULL ORDER BY rowid")?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, m) = row?;
+            if let Ok(m) = serde_json::from_str(&m) {
+                out.push((id, m));
+            }
+        }
+        Ok(out)
+    }
+
+    /// A sent view is done: it becomes the listed one when the server took
+    /// it (`taken`), and is dropped either way, unless it was changed again
+    /// meanwhile.
+    pub(crate) fn mine_sent(&self, collection: &str, sent: &wire::Mine, taken: bool) -> Result<()> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+        let json = serde_json::to_string(sent).expect("serializable");
+        let n =
+            tx.execute("UPDATE collections SET mine = NULL WHERE id = ?1 AND mine = ?2", params![collection, json])?;
+        if n > 0 && taken {
+            let info: String =
+                tx.query_row("SELECT info FROM collections WHERE id = ?1", params![collection], |r| r.get(0))?;
+            if let Ok(mut c) = serde_json::from_str::<wire::Collection>(&info) {
+                c.mine = sent.clone();
+                tx.execute(
+                    "UPDATE collections SET info = ?2 WHERE id = ?1",
+                    params![collection, serde_json::to_string(&c).expect("serializable")],
+                )?;
+            }
+        }
+        if n > 0 && !taken {
+            // Back to what the server has.
+            local_change(&tx, collection, None, false)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
 
     /// Take the server's collection list. New ones are added (never
     /// synced), changed ones updated, and ones that are gone removed with
@@ -862,6 +953,26 @@ mod tests {
         )
         .unwrap();
         s
+    }
+
+    #[test]
+    fn a_schema_1_store_is_upgraded() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+        conn.execute(
+            "INSERT INTO collections (id, info, state) VALUES ('c', ?1, 3)",
+            params![serde_json::to_string(&collection("c", "calendar", 3)).unwrap()],
+        )
+        .unwrap();
+        let s = Store::init(conn).unwrap();
+        let v: i64 = s.lock().pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        assert_eq!(v, 2);
+        assert_eq!(s.collections().unwrap()[0].state, Some(3), "nothing lost");
+        let mine = wire::Mine { hidden: true, ..wire::Mine::default() };
+        s.set_mine("c", &mine).unwrap();
+        assert_eq!(s.collections().unwrap()[0].info.mine, mine);
+        assert!(s.set_mine("nope", &mine).is_err());
     }
 
     #[test]

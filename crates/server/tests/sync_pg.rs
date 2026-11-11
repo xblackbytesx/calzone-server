@@ -237,6 +237,19 @@ async fn collections_and_changes() {
     assert_eq!(cols[0]["read_only"], false);
     assert_eq!(cols[0]["mine"]["color"], "#aa0000");
     assert_eq!(cols[0]["mine"]["hidden"], true);
+    // Bob's own view from his phone: replaced as a whole, as the web does.
+    let path = format!("/sync/v1/collections/{family}/mine");
+    let want = json!({ "color": "#00aa00", "name": "Gezin", "hidden": false, "default_alarm": 30 });
+    let (s, _) = b.call("PUT", &path, Some(want)).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let now = b.get("/sync/v1/collections").await;
+    let mine = &now["collections"][0]["mine"];
+    assert_eq!((mine["color"].as_str(), mine["name"].as_str()), (Some("#00aa00"), Some("Gezin")));
+    assert_eq!((mine["hidden"].as_bool(), mine["default_alarm"].as_i64()), (Some(false), Some(30)));
+    let (s, v) = b.call("PUT", &path, Some(json!({ "color": "red", "hidden": false }))).await;
+    assert_eq!((s, v["code"].as_str()), (StatusCode::BAD_REQUEST, Some("bad_request")));
+    let (s, _) = b.call("PUT", &format!("/sync/v1/collections/{work}/mine"), Some(json!({ "hidden": true }))).await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "not shared: not found");
     let mine = a.get("/sync/v1/collections").await;
     assert_eq!(mine["collections"].as_array().unwrap().len(), 3);
     assert!(mine["collections"].as_array().unwrap().iter().any(|c| c["kind"] == "addressbook"));

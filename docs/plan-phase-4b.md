@@ -110,6 +110,13 @@ in device-protected storage without titles. Spike code and APK deleted.
 - Measured on the household corpus: a month of occurrences on a phone
   well under one frame (S4 measured 7 ms on the host).
 
+**Step 1 done 2026-11-11** (decision 52): `calzone_core::view` shared by
+the web and the phone, repeats with an end (also on the web), recur's fix
+5, `calzone_client::calendar` with an expansion cache (a cold month 129
+ms on a desk machine, then 0.7 ms), its FFI, and `PUT
+/sync/v1/collections/{id}/mine`. The new endpoint answers 204, so it has
+no golden file; `sync_pg` and `client_pg` cover it.
+
 ## Step 2: the app shell and the agenda
 
 - The calendar becomes the main screen; today's settings screen moves
@@ -119,12 +126,20 @@ in device-protected storage without titles. Spike code and APK deleted.
 - Read-only event sheet. Conflicts in place.
 - Screenshot tests on made-up data, English and Dutch, light and dark.
 
+**Step 2 done 2026-11-11** (app decisions 23 to 26): the agenda as the
+main screen, the read-only event sheet, conflicts in place, settings
+behind a button. Device-untested.
+
 ## Step 3: day, week and month
 
 - Day and week: a time grid with all-day row, overlapping events side by
   side, now line, swipe to page. Month: dots or short titles per day,
   tap a day for its list.
 - The view and date survive rotation and process death.
+
+**Step 3 done 2026-11-11** (app decisions 27 to 29): day, week and month
+views chosen from a menu, swiped a page at a time, a date picker behind
+the title, the view remembered. Device-untested.
 
 ## Step 4: editing
 
@@ -135,6 +150,12 @@ in device-protected storage without titles. Spike code and APK deleted.
   reminder.
 - The household test's tasks 2 to 7 and 9 can be done in the app.
 
+**Step 4 done 2026-11-11** (app decisions 30 and 31): the editor (new,
+edit, quick add, repeat ends, my reminders), the scope question, delete,
+Undo for 10 seconds, and my name, color, default reminder and "hide
+everywhere" per calendar in Settings. Device-untested; the bridge mirrors
+each write into Android with the sync that follows it.
+
 ## Step 5: reminders
 
 Decision 51: one exact alarm for the next due moment, set from the core's
@@ -144,6 +165,11 @@ zone or clock change and app update; the notification permission asked
 with the first reminder. Device checks: a reminder after hours of Doze,
 and a time zone change.
 
+**Step 5 done 2026-11-11** (app decision 32): `calzone_client::calendar::
+reminders` and its FFI; the app's one alarm, notifications with Snooze
+(10 minutes) and Open, the locked-boot notice, and the permission asked
+with the first reminder. Device-untested, including both device checks.
+
 ## Step 6: widgets, other apps and search
 
 - Glance widgets: agenda list and month, in the app's colors, tapping
@@ -152,6 +178,11 @@ and a time zone change.
   so "add to calendar" and the system open the app (the bridge's
   `_SYNC_ID` maps a row back to the object).
 - Search over titles, places and notes in the store.
+
+**Step 6 done 2026-11-11** (app decisions 34 and 35): `calzone_client::
+calendar::search` and its FFI; the app answers `INSERT`, `VIEW` and
+`EDIT` of Android's events and `VIEW` of a time, has a search screen, and
+an agenda and a month widget (Glance 1.2.0). Device-untested.
 
 ## Step 7: the household test and the release
 

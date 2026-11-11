@@ -11,10 +11,14 @@
 //! the server's address and the device token. Calls block; the app makes
 //! them off the main thread (the sync adapter's own thread, WorkManager).
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
+use calzone_client::calendar::{self, Expansions, Undo};
 use calzone_client::{Error, Request, Response, Store, Transport, bridge, engine, link};
-use serde::Serialize;
+use calzone_core::edit::Scope;
+use calzone_core::view::{EventInput, Repeat, TimeInput};
+use serde::{Deserialize, Deserializer, Serialize};
 
 uniffi::setup_scaffolding!();
 
@@ -60,6 +64,65 @@ fn parse_row(row: &str) -> Result<calzone_core::android::EventRow, CzError> {
 
 fn parse_contact(row: &str) -> Result<calzone_core::android_contacts::ContactRow, CzError> {
     serde_json::from_str(row).map_err(|e| CzError::Input { message: format!("not an Android contact: {e}") })
+}
+
+fn input_error(message: String) -> CzError {
+    CzError::Input { message }
+}
+
+/// `absent` / `null` / value, for fields where null means "clear".
+fn tri<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(d).map(Some)
+}
+
+/// The event sheet's input, as the web's calendar API takes it: only what
+/// changed; times are the phone's wall time (`2026-01-05`,
+/// `2026-01-05T09:00`).
+#[derive(Deserialize, Default)]
+struct InputJson {
+    summary: Option<String>,
+    location: Option<String>,
+    description: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    #[serde(default, deserialize_with = "tri")]
+    repeat: Option<Option<Repeat>>,
+    alarms: Option<Vec<i64>>,
+}
+
+fn parse_input(json: &str) -> Result<EventInput, CzError> {
+    let i: InputJson = serde_json::from_str(json).map_err(|e| input_error(format!("not an event input: {e}")))?;
+    let time = |v: Option<String>| -> Result<Option<TimeInput>, CzError> {
+        v.map(|s| s.parse().map_err(|_| input_error(format!("{s:?} is not a date or time")))).transpose()
+    };
+    Ok(EventInput {
+        summary: i.summary,
+        location: i.location,
+        description: i.description,
+        start: time(i.start)?,
+        end: time(i.end)?,
+        rrule: None,
+        repeat: i.repeat,
+        alarms: i.alarms,
+    })
+}
+
+fn parse_scope(s: &str) -> Result<Scope, CzError> {
+    match s {
+        "this" => Ok(Scope::This),
+        "following" => Ok(Scope::Following),
+        "all" => Ok(Scope::All),
+        other => Err(input_error(format!("unknown scope {other:?}"))),
+    }
+}
+
+/// A write's answer: the event's name, a second series a "this and
+/// following" change made, and the id to pass to [`CalZone::undo`].
+#[derive(Serialize)]
+struct WrittenJson {
+    name: String,
+    created: Option<String>,
+    undo: u64,
 }
 
 fn json(v: &impl Serialize) -> String {
@@ -116,6 +179,24 @@ pub fn parse_link(url: String) -> Option<SignInLink> {
 #[derive(uniffi::Object)]
 pub struct CalZone {
     store: Store,
+    /// The last write from the app's screens, for its Undo (one at a time,
+    /// as the screen shows one).
+    undo: Mutex<Option<(u64, Undo)>>,
+    undo_ids: AtomicU64,
+    /// Repeating events expanded once per window (decision 52).
+    expansions: Expansions,
+}
+
+impl CalZone {
+    fn new(store: Store) -> CalZone {
+        CalZone { store, undo: Mutex::new(None), undo_ids: AtomicU64::new(1), expansions: Expansions::new() }
+    }
+
+    fn written(&self, w: calendar::Written) -> String {
+        let id = self.undo_ids.fetch_add(1, Ordering::SeqCst);
+        *self.undo.lock().unwrap_or_else(|p| p.into_inner()) = Some((id, w.undo));
+        json(&WrittenJson { name: w.name, created: w.created, undo: id })
+    }
 }
 
 fn now() -> i64 {
@@ -127,7 +208,7 @@ impl CalZone {
     /// Open (or create) the store at `path`, in the app's own files.
     #[uniffi::constructor]
     pub fn open(path: String) -> Result<Arc<CalZone>, CzError> {
-        Ok(Arc::new(CalZone { store: Store::open(path)? }))
+        Ok(Arc::new(CalZone::new(Store::open(path)?)))
     }
 
     // --- the account ---
@@ -320,6 +401,127 @@ impl CalZone {
     pub fn edit(&self, collection: String, name: String, body: Option<String>) -> Result<(), CzError> {
         Ok(self.store.edit(&collection, &name, body.as_deref())?)
     }
+
+    // --- CalZone's own calendar screens (decision 52) ---
+
+    /// `[Item]` JSON: every event occurring in `[from, to)` (UTC seconds)
+    /// in the calendars this phone shows (`hidden`: switched off here), in
+    /// `phone_zone`, sorted by start, all-day first.
+    pub fn occurrences(&self, from: i64, to: i64, phone_zone: String, hidden: Vec<String>) -> Result<String, CzError> {
+        Ok(json(&calendar::occurrences(&self.store, &self.expansions, from, to, &phone_zone, &hidden)?))
+    }
+
+    /// `Event` JSON for the event sheet (`instance`: one occurrence), or
+    /// `None` when it is gone.
+    pub fn event(
+        &self,
+        collection: String,
+        name: String,
+        instance: Option<String>,
+        phone_zone: String,
+    ) -> Result<Option<String>, CzError> {
+        Ok(calendar::event(&self.store, &collection, &name, instance.as_deref(), &phone_zone)?.map(|e| json(&e)))
+    }
+
+    /// A new event from the sheet's input JSON, named `<uid>.ics`. Returns
+    /// the written JSON (`name`, `created`, `undo`).
+    pub fn create_event(
+        &self,
+        collection: String,
+        input: String,
+        phone_zone: String,
+        uid: String,
+    ) -> Result<String, CzError> {
+        let w = calendar::create(&self.store, &collection, &parse_input(&input)?, &phone_zone, &uid, now())?;
+        Ok(self.written(w))
+    }
+
+    /// Change an event; `scope` is `this`, `following` or `all` for an
+    /// occurrence (`instance`) of a recurring one. `new_uid` names the new
+    /// series a `following` change makes.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_event(
+        &self,
+        collection: String,
+        name: String,
+        instance: Option<String>,
+        scope: String,
+        input: String,
+        phone_zone: String,
+        new_uid: String,
+    ) -> Result<String, CzError> {
+        let w = calendar::update(
+            &self.store,
+            &collection,
+            &name,
+            instance.as_deref(),
+            parse_scope(&scope)?,
+            &parse_input(&input)?,
+            &phone_zone,
+            &new_uid,
+            now(),
+        )?;
+        Ok(self.written(w))
+    }
+
+    /// Delete an event, one occurrence, or it and the ones after.
+    pub fn delete_event(
+        &self,
+        collection: String,
+        name: String,
+        instance: Option<String>,
+        scope: String,
+    ) -> Result<String, CzError> {
+        let w = calendar::remove(&self.store, &collection, &name, instance.as_deref(), parse_scope(&scope)?, now())?;
+        Ok(self.written(w))
+    }
+
+    /// Undo the write with this id: `false` when it is not the last one,
+    /// or something changed it since (nothing is changed then).
+    pub fn undo(&self, id: u64) -> Result<bool, CzError> {
+        let mut last = self.undo.lock().unwrap_or_else(|p| p.into_inner());
+        let Some((i, u)) = last.as_ref() else { return Ok(false) };
+        if *i != id {
+            return Ok(false);
+        }
+        let done = calendar::undo(&self.store, u)?;
+        if done {
+            *last = None;
+        }
+        Ok(done)
+    }
+
+    /// `[Due]` JSON (`fire`, `occurrence`): my reminders ringing in
+    /// `[from, to)` (UTC seconds), soonest first, in the calendars this
+    /// phone shows (decision 51).
+    pub fn reminders(&self, from: i64, to: i64, phone_zone: String, hidden: Vec<String>) -> Result<String, CzError> {
+        Ok(json(&calendar::reminders(&self.store, &self.expansions, from, to, &phone_zone, &hidden)?))
+    }
+
+    /// `[Item]` JSON: events whose title, place or notes hold every word of
+    /// `query`, one occurrence each, coming ones first (phase 4b step 6).
+    pub fn search(
+        &self,
+        query: String,
+        phone_zone: String,
+        hidden: Vec<String>,
+        limit: u32,
+    ) -> Result<String, CzError> {
+        Ok(json(&calendar::search(&self.store, &self.expansions, &query, now(), &phone_zone, &hidden, limit as usize)?))
+    }
+
+    /// Quick add's draft JSON (`title`, `all_day`, `start`, `end`) for
+    /// "dentist thu 3pm" in `lang` (`en`, `nl`), or `None` for no title.
+    pub fn quick_add(&self, text: String, lang: String, phone_zone: String) -> Option<String> {
+        calendar::quick_add(&text, &lang, &phone_zone, now()).map(|d| json(&d))
+    }
+
+    /// The person's own view of a calendar or address book (`Mine` JSON):
+    /// shown at once, sent with the next sync.
+    pub fn set_mine(&self, collection: String, mine: String) -> Result<(), CzError> {
+        let m = serde_json::from_str(&mine).map_err(|e| input_error(format!("not a view: {e}")))?;
+        Ok(calendar::set_mine(&self.store, &collection, &m)?)
+    }
 }
 
 #[cfg(test)]
@@ -336,7 +538,7 @@ mod tests {
 
     #[test]
     fn errors_say_what_to_do() {
-        let cz = CalZone { store: Store::in_memory().unwrap() };
+        let cz = CalZone::new(Store::in_memory().unwrap());
         assert!(matches!(cz.sync(Arc::new(Offline)), Err(CzError::Network { .. })));
         assert!(matches!(cz.edit("nope".into(), "a.ics".into(), None), Err(CzError::Input { .. })));
         assert_eq!(cz.account().unwrap(), None);
@@ -346,5 +548,19 @@ mod tests {
             parse_link(format!("https://cz.example.com/link/{code}")),
             Some(SignInLink { server: "https://cz.example.com".into(), code })
         );
+        assert!(matches!(
+            cz.create_event("nope".into(), "{}".into(), "UTC".into(), "u".into()),
+            Err(CzError::Input { .. })
+        ));
+        assert!(matches!(parse_input(r#"{"start": "monday"}"#), Err(CzError::Input { .. })));
+        assert!(matches!(parse_scope("some"), Err(CzError::Input { .. })));
+        let i = parse_input(
+            r#"{"summary": "Swim", "start": "2026-01-07T16:00", "repeat": {"freq": "weekly", "until": "2026-07-01"}}"#,
+        )
+        .unwrap();
+        assert_eq!(i.repeat.flatten().and_then(|r| r.until).map(|d| d.to_string()), Some("2026-07-01".into()));
+        assert_eq!(parse_input(r#"{"repeat": null}"#).unwrap().repeat, Some(None));
+        assert!(!cz.undo(1).unwrap(), "nothing to undo");
+        assert!(cz.quick_add("dentist thu 3pm".into(), "en".into(), "UTC".into()).unwrap().contains("dentist"));
     }
 }

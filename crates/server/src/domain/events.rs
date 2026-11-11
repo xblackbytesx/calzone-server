@@ -11,12 +11,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use calzone_core::edit::{self, EditError, EventChange, Scope};
+use calzone_core::edit::{self, EditError, Scope};
 use calzone_core::lines::Document;
-use calzone_core::moment::{Key, Moment};
-use calzone_core::recur::{self, When};
+use calzone_core::moment::Key;
 use calzone_core::split::UserLayer;
-use chrono::{NaiveDate, NaiveDateTime, TimeZone};
+use calzone_core::view;
+pub use calzone_core::view::{ALARM_PRESETS, DEFAULT_COLOR, EventInput, Repeat, TimeInput};
+use chrono::NaiveDateTime;
 use serde::Serialize;
 use sqlx::types::Json;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -27,8 +28,6 @@ use super::objects::{self, Precondition, delete_in, lock, prepare, served_body, 
 use super::prefs::{self, CalendarPrefs};
 use super::{Actor, DomainError, Result};
 
-/// The default color for a calendar that has none.
-pub const DEFAULT_COLOR: &str = "#3a7bd5";
 const HISTORY_DAYS: i32 = 30;
 
 /// One occurrence as the grid shows it.
@@ -54,22 +53,6 @@ pub struct GridEvent {
     pub own: bool,
     pub editable: bool,
     pub recurring: bool,
-}
-
-fn key_of(w: &When) -> Key {
-    match *w {
-        When::Date(d) => Key::Date(d),
-        When::Utc(t) | When::Floating(t) => Key::Time(t),
-        When::Zoned { local, .. } => Key::Time(local),
-    }
-}
-
-/// A `When` as viewer-local text for the grid.
-fn local_text(w: &When, viewer: chrono_tz::Tz) -> String {
-    match w {
-        When::Date(d) => d.format("%Y-%m-%d").to_string(),
-        other => viewer.from_utc_datetime(&other.instant(viewer)).naive_local().format("%Y-%m-%dT%H:%M:%S").to_string(),
-    }
 }
 
 /// Every visible calendar's occurrences overlapping `[from, to)` (UTC),
@@ -104,11 +87,9 @@ pub async fn occurrences(
             if s.meta.kind != "VEVENT" {
                 continue;
             }
-            let Ok(exp) = recur::expand(&s.body, from, to, viewer) else { continue };
-            for o in exp.occurrences {
-                let instance = o.recurrence_id.as_ref().map(|r| key_of(r).to_string());
+            for o in view::occurrences(&s.body, from, to, viewer) {
                 let mut id = format!("{}/{}", c.id, s.meta.name);
-                if let Some(k) = &instance {
+                if let Some(k) = &o.instance {
                     id = format!("{id}/{k}");
                 }
                 out.push(GridEvent {
@@ -116,13 +97,13 @@ pub async fn occurrences(
                     collection: c.id,
                     name: s.meta.name.clone(),
                     etag: s.meta.etag(),
-                    recurring: instance.is_some(),
-                    instance,
-                    title: o.summary.clone().unwrap_or_default(),
-                    location: o.location.clone(),
-                    start: local_text(&o.start, viewer),
-                    end: local_text(&o.end, viewer),
-                    all_day: matches!(o.start, When::Date(_)),
+                    recurring: o.recurring,
+                    instance: o.instance,
+                    title: o.title,
+                    location: o.location,
+                    start: o.start,
+                    end: o.end,
+                    all_day: o.all_day,
                     color: color.clone(),
                     calendar: calendar.clone(),
                     owner: owner.clone(),
@@ -134,84 +115,6 @@ pub async fn occurrences(
     }
     out.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.title.cmp(&b.title)));
     Ok(out)
-}
-
-/// A time from the browser: a date, or a wall-clock time in the viewer's
-/// zone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TimeInput {
-    Date(NaiveDate),
-    Local(NaiveDateTime),
-}
-
-impl std::str::FromStr for TimeInput {
-    type Err = ();
-    /// `2026-01-05`, `2026-01-05T09:00` or `2026-01-05T09:00:00`.
-    fn from_str(s: &str) -> std::result::Result<Self, ()> {
-        if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-            return Ok(TimeInput::Date(d));
-        }
-        NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
-            .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M"))
-            .map(TimeInput::Local)
-            .map_err(|_| ())
-    }
-}
-
-/// What the browser asks to change, times still in the viewer's terms.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct EventInput {
-    pub summary: Option<String>,
-    pub location: Option<String>,
-    pub description: Option<String>,
-    pub start: Option<TimeInput>,
-    pub end: Option<TimeInput>,
-    pub rrule: Option<Option<String>>,
-    pub alarms: Option<Vec<i64>>,
-}
-
-fn viewer_to_utc(viewer: chrono_tz::Tz, local: NaiveDateTime) -> NaiveDateTime {
-    viewer.from_local_datetime(&local).earliest().map(|t| t.naive_utc()).unwrap_or(local)
-}
-
-/// A viewer-local time as a moment of the same kind as the event's own:
-/// floating stays floating, UTC stays UTC, a zoned event keeps its zone
-/// (converted, so 10:00 for the viewer is 10:00 for the viewer). New
-/// events and all-day events turned timed take the viewer's zone.
-pub fn to_moment(input: TimeInput, like: Option<&Moment>, viewer: chrono_tz::Tz) -> Moment {
-    let local = match input {
-        TimeInput::Date(d) => return Moment::Date(d),
-        TimeInput::Local(l) => l,
-    };
-    match like {
-        Some(Moment::Floating(_)) => Moment::Floating(local),
-        Some(Moment::Utc(_)) => Moment::Utc(viewer_to_utc(viewer, local)),
-        Some(Moment::Zoned { tzid, .. }) => match tzid.parse::<chrono_tz::Tz>() {
-            Ok(tz) => Moment::Zoned {
-                local: tz.from_utc_datetime(&viewer_to_utc(viewer, local)).naive_local(),
-                tzid: tzid.clone(),
-            },
-            Err(_) => Moment::Zoned { local, tzid: viewer.name().to_string() },
-        },
-        _ => Moment::Zoned { local, tzid: viewer.name().to_string() },
-    }
-}
-
-fn change_from(
-    input: &EventInput,
-    like_start: Option<&Moment>,
-    like_end: Option<&Moment>,
-    viewer: chrono_tz::Tz,
-) -> EventChange {
-    EventChange {
-        summary: input.summary.clone(),
-        location: input.location.clone(),
-        description: input.description.clone(),
-        start: input.start.map(|t| to_moment(t, like_start, viewer)),
-        end: input.end.map(|t| to_moment(t, like_end.or(like_start), viewer)),
-        rrule: input.rrule.clone(),
-        alarms: input.alarms.clone(),
-    }
 }
 
 fn edit_error(e: EditError) -> DomainError {
@@ -305,23 +208,6 @@ async fn served_in(
     Ok((served_body(body, layer), rev))
 }
 
-fn start_end_of(text: &str, instance: Option<Key>) -> (Option<Moment>, Option<Moment>) {
-    let Ok(doc) = Document::parse(text) else { return (None, None) };
-    let Some(cal) = doc.components.first() else { return (None, None) };
-    let events: Vec<_> = cal.components().filter(|c| c.name == "VEVENT").collect();
-    // The override for this instance if there is one, else the master.
-    let pick = instance
-        .and_then(|k| {
-            events
-                .iter()
-                .find(|c| c.property("RECURRENCE-ID").and_then(Moment::from_line).is_some_and(|r| r.key() == k))
-        })
-        .or_else(|| events.iter().find(|c| c.property("RECURRENCE-ID").is_none()))
-        .or(events.first());
-    let Some(c) = pick else { return (None, None) };
-    (c.property("DTSTART").and_then(Moment::from_line), c.property("DTEND").and_then(Moment::from_line))
-}
-
 /// Create an event in a calendar. The actor's default reminder for that
 /// calendar applies when no reminders are given.
 pub async fn create(
@@ -332,7 +218,7 @@ pub async fn create(
     viewer: chrono_tz::Tz,
     now: NaiveDateTime,
 ) -> Result<Saved> {
-    let mut change = change_from(input, None, None, viewer);
+    let mut change = view::change_for(None, None, input, viewer);
     if change.alarms.is_none() {
         let p: CalendarPrefs = prefs::calendar_prefs(pool, actor).await?.remove(&collection).unwrap_or_default();
         change.alarms = p.default_alarm.map(|m| vec![i64::from(m)]);
@@ -391,8 +277,7 @@ pub async fn update(
     now: NaiveDateTime,
 ) -> Result<Saved> {
     write(pool, actor, collection, name, etag, |text| {
-        let (s, e) = start_end_of(text, instance);
-        let change = change_from(input, s.as_ref(), e.as_ref(), viewer);
+        let change = view::change_for(Some(text), instance, input, viewer);
         edit::edit(text, instance, scope, &change, now, &Uuid::new_v4().to_string()).map_err(edit_error)
     })
     .await
@@ -646,8 +531,8 @@ pub async fn undo(pool: &PgPool, actor: Actor, change_id: Uuid) -> Result<()> {
     Ok(())
 }
 
-/// One event (or occurrence) as the panel shows it, in the viewer's own
-/// wall-clock time, with only their own reminders.
+/// One event (or occurrence) as the panel shows it: the core's view
+/// ([`view::Detail`]) with its calendar as the viewer sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventDetail {
     pub collection: Uuid,
@@ -664,8 +549,11 @@ pub struct EventDetail {
     pub end_date: String,
     pub end_time: String,
     /// `none`, `daily`, `weekly`, `monthly`, `yearly`, or `custom` for any
-    /// other rule (kept as it is unless changed).
+    /// other rule (kept as it is unless changed); with its end, empty when
+    /// it has none.
     pub repeat: &'static str,
+    pub repeat_until: String,
+    pub repeat_count: String,
     pub recurring: bool,
     /// Minutes before the start; `None` when a reminder is not one the
     /// panel offers (it is kept as it is unless changed).
@@ -678,32 +566,6 @@ pub struct EventDetail {
     pub color: String,
 }
 
-/// A moment as viewer-local (date, time, all day).
-fn local_parts(m: &Moment, doc: &Document, viewer: chrono_tz::Tz) -> (NaiveDate, Option<chrono::NaiveTime>) {
-    let utc_to_local = |u: NaiveDateTime| viewer.from_utc_datetime(&u).naive_local();
-    let local = match m {
-        Moment::Date(d) => return (*d, None),
-        Moment::Floating(t) => *t,
-        Moment::Utc(t) => utc_to_local(*t),
-        Moment::Zoned { local, tzid } => utc_to_local(calzone_core::moment::zoned_to_utc(*local, tzid, doc)),
-    };
-    (local.date(), Some(local.time()))
-}
-
-fn repeat_of(rule: Option<&str>) -> &'static str {
-    match rule.map(|r| r.trim().to_ascii_uppercase()).as_deref() {
-        None => "none",
-        Some("FREQ=DAILY") => "daily",
-        Some("FREQ=WEEKLY") => "weekly",
-        Some("FREQ=MONTHLY") => "monthly",
-        Some("FREQ=YEARLY") => "yearly",
-        Some(_) => "custom",
-    }
-}
-
-/// The panel's reminder presets, in minutes before.
-pub const ALARM_PRESETS: [i64; 6] = [0, 5, 15, 30, 60, 1440];
-
 pub async fn detail(
     pool: &PgPool,
     actor: Actor,
@@ -714,89 +576,27 @@ pub async fn detail(
 ) -> Result<EventDetail> {
     let c = collections::get(pool, actor, collection).await?;
     let served = objects::get(pool, actor, collection, name).await?;
-    let doc = Document::parse(&served.body).map_err(|_| DomainError::NotFound)?;
-    let cal = doc.components.first().ok_or(DomainError::NotFound)?;
-    let events: Vec<_> = cal.components().filter(|x| x.name == "VEVENT").collect();
-    let master = events
-        .iter()
-        .copied()
-        .find(|x| x.property("RECURRENCE-ID").is_none())
-        .or(events.first().copied())
-        .ok_or(DomainError::NotFound)?;
-    let master_start = master.property("DTSTART").and_then(Moment::from_line).ok_or(DomainError::NotFound)?;
-    let master_end = master.property("DTEND").and_then(Moment::from_line).unwrap_or_else(|| {
-        let d = master.property("DURATION").and_then(|l| edit::parse_duration(l.value()));
-        match d {
-            Some(d) => master_start.shifted(d),
-            None if master_start.is_date() => master_start.shifted(chrono::Duration::days(1)),
-            None => master_start.clone(),
-        }
-    });
-    let recurring = master.property("RRULE").is_some() || master.property("RDATE").is_some();
-    let over = instance.and_then(|k| {
-        events
-            .iter()
-            .copied()
-            .find(|x| x.property("RECURRENCE-ID").and_then(Moment::from_line).is_some_and(|r| r.key() == k))
-    });
-    let part = over.unwrap_or(master);
-    let (start, end) = match (over, instance) {
-        (Some(o), _) => {
-            let s = o.property("DTSTART").and_then(Moment::from_line).unwrap_or_else(|| master_start.clone());
-            let e = o.property("DTEND").and_then(Moment::from_line).unwrap_or_else(|| s.clone());
-            (s, e)
-        }
-        (None, Some(k)) if recurring => {
-            let s = master_start.with_key(k);
-            let len = match (master_start.key(), master_end.key()) {
-                (Key::Date(a), Key::Date(b)) => b - a,
-                (Key::Time(a), Key::Time(b)) => b - a,
-                _ => chrono::Duration::zero(),
-            };
-            (s.clone(), s.shifted(len))
-        }
-        _ => (master_start.clone(), master_end.clone()),
-    };
-    let (sd, st) = local_parts(&start, &doc, viewer);
-    let (mut ed, et) = local_parts(&end, &doc, viewer);
-    let all_day = st.is_none();
-    if all_day {
-        // Stored exclusive; shown as the last day.
-        ed = (ed - chrono::Duration::days(1)).max(sd);
-    }
-    let text = |n: &str| part.property(n).map(|l| calzone_core::object::unescape(l.value())).unwrap_or_default();
-    let alarms: Vec<i64> = part
-        .components()
-        .filter(|a| a.name == "VALARM")
-        .filter_map(|a| a.property("TRIGGER"))
-        .filter(|t| t.param("VALUE").is_none_or(|v| !v.eq_ignore_ascii_case("DATE-TIME")))
-        .filter_map(|t| edit::parse_duration(t.value()))
-        .map(|d| -d.num_minutes())
-        .collect();
-    let (alarm, alarm_kept) = match alarms.as_slice() {
-        [] => (None, false),
-        [m] if ALARM_PRESETS.contains(m) => (Some(*m), false),
-        _ => (None, true),
-    };
+    let d = view::detail(&served.body, instance, viewer).ok_or(DomainError::NotFound)?;
     let prefs = prefs::calendar_prefs(pool, actor).await?.remove(&collection).unwrap_or_default();
-    let fmt_t = |t: Option<chrono::NaiveTime>| t.map(|t| t.format("%H:%M").to_string()).unwrap_or_default();
     Ok(EventDetail {
         collection,
         name: name.to_string(),
         etag: served.meta.etag(),
-        instance: instance.filter(|_| recurring || over.is_some()).map(|k| k.to_string()),
-        title: text("SUMMARY"),
-        location: text("LOCATION"),
-        description: text("DESCRIPTION"),
-        all_day,
-        start_date: sd.format("%Y-%m-%d").to_string(),
-        start_time: fmt_t(st),
-        end_date: ed.format("%Y-%m-%d").to_string(),
-        end_time: fmt_t(et),
-        repeat: repeat_of(master.property("RRULE").map(|l| l.value())),
-        recurring,
-        alarm,
-        alarm_kept,
+        instance: d.instance,
+        title: d.title,
+        location: d.location,
+        description: d.description,
+        all_day: d.all_day,
+        start_date: d.start_date,
+        start_time: d.start_time,
+        end_date: d.end_date,
+        end_time: d.end_time,
+        repeat: d.repeat,
+        repeat_until: d.repeat_until.unwrap_or_default(),
+        repeat_count: d.repeat_count.map(|n| n.to_string()).unwrap_or_default(),
+        recurring: d.recurring,
+        alarm: d.alarm,
+        alarm_kept: d.alarm_kept,
         calendar: prefs
             .display_name
             .unwrap_or_else(|| if c.display_name.is_empty() { c.slug.clone() } else { c.display_name.clone() }),
@@ -808,46 +608,4 @@ pub async fn detail(
         editable: c.access.can_write() && !c.subscribed,
         color: prefs.color.or(c.color).unwrap_or_else(|| DEFAULT_COLOR.into()),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn t(s: &str) -> NaiveDateTime {
-        NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap()
-    }
-
-    #[test]
-    fn browser_times() {
-        assert_eq!("2026-01-05".parse(), Ok(TimeInput::Date(NaiveDate::from_ymd_opt(2026, 1, 5).unwrap())));
-        assert_eq!("2026-01-05T09:30".parse(), Ok(TimeInput::Local(t("2026-01-05 09:30"))));
-        assert_eq!("2026-01-05T09:30:00".parse(), Ok(TimeInput::Local(t("2026-01-05 09:30"))));
-        assert!("monday".parse::<TimeInput>().is_err());
-    }
-
-    #[test]
-    fn times_keep_the_events_kind() {
-        let ams = chrono_tz::Europe::Amsterdam;
-        let local = TimeInput::Local(t("2026-01-05 10:00"));
-        assert_eq!(
-            to_moment(local, Some(&Moment::Floating(t("2026-01-01 00:00"))), ams),
-            Moment::Floating(t("2026-01-05 10:00"))
-        );
-        assert_eq!(
-            to_moment(local, Some(&Moment::Utc(t("2026-01-01 00:00"))), ams),
-            Moment::Utc(t("2026-01-05 09:00"))
-        );
-        let ny = Moment::Zoned { local: t("2026-01-01 00:00"), tzid: "America/New_York".into() };
-        assert_eq!(
-            to_moment(local, Some(&ny), ams),
-            Moment::Zoned { local: t("2026-01-05 04:00"), tzid: "America/New_York".into() }
-        );
-        assert_eq!(
-            to_moment(local, None, ams),
-            Moment::Zoned { local: t("2026-01-05 10:00"), tzid: "Europe/Amsterdam".into() }
-        );
-        let day = TimeInput::Date(NaiveDate::from_ymd_opt(2026, 1, 5).unwrap());
-        assert!(to_moment(day, Some(&ny), ams).is_date());
-    }
 }

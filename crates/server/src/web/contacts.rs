@@ -47,15 +47,7 @@ fn color_for(name: &str) -> &'static str {
     PALETTE[(h % PALETTE.len() as u32) as usize]
 }
 
-pub fn initials(name: &str) -> String {
-    let words: Vec<&str> = name.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
-    let pick = |w: &str| w.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
-    match words.as_slice() {
-        [] => "?".into(),
-        [one] => one.chars().take(2).collect::<String>().to_uppercase(),
-        [first, .., last] => pick(first) + &pick(last),
-    }
-}
+pub use calzone_core::view::initials;
 
 /// A list letter: the first letter, `#` for anything else.
 fn letter(name: &str) -> String {
@@ -602,10 +594,6 @@ mod tests {
 
     #[test]
     fn initials_letters_and_links() {
-        assert_eq!(initials("Ada Lovelace"), "AL");
-        assert_eq!(initials("Ada Augusta King-Noel"), "AN");
-        assert_eq!(initials("Pizzeria"), "PI");
-        assert_eq!(initials("!!"), "?");
         assert_eq!(letter("émile"), "É");
         assert_eq!(letter("3M"), "#");
         assert_eq!(href(Uuid::nil(), "a b/c?.vcf"), "/contacts/00000000-0000-0000-0000-000000000000/a%20b%2Fc%3F.vcf");

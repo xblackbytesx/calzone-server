@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::http::StatusCode;
-use calzone_client::{ConflictDetail, Request, Response, Store, Transport, engine};
+use calzone_client::{ConflictDetail, Request, Response, Store, Transport, calendar, engine};
 use calzone_server::domain::{
-    Access, CollectionKind, NewCollection, Precondition, accounts, collections, objects, principals,
+    Access, CollectionKind, NewCollection, Precondition, accounts, collections, objects, prefs, principals,
 };
 use common::{Db, send, serve};
 use serde_json::json;
@@ -309,6 +309,29 @@ async fn two_phones_and_the_web_on_one_calendar() {
     let lost = serde_json::to_value(&lost[0].lost).unwrap();
     assert_eq!(lost["field"], "SUMMARY");
     assert_eq!(lost["lost"][0], "SUMMARY:Tandarts", "the person is told what they lost");
+
+    // B's own view of the calendar from the phone (phase 4b): shown at
+    // once, on the server after the next run, and nothing left waiting.
+    let mine =
+        calzone_core::sync::Mine { color: Some("#00aa00".into()), name: Some("Gezin".into()), ..Default::default() };
+    calendar::set_mine(&b.store, &family.to_string(), &mine).unwrap();
+    b.synced().await;
+    let p = prefs::calendar_prefs(&db.pool, bob).await.unwrap().remove(&family).unwrap();
+    assert_eq!((p.color.as_deref(), p.display_name.as_deref()), (Some("#00aa00"), Some("Gezin")));
+    assert_eq!(b.store.collections().unwrap()[0].info.mine, mine);
+    assert!(!prefs::calendar_prefs(&db.pool, anna).await.unwrap().contains_key(&family), "anna's view is her own");
+
+    // An event made in the app's own screens reaches the web.
+    let input = calzone_core::view::EventInput {
+        summary: Some("Swim".into()),
+        start: Some("2026-03-04T16:00".parse().unwrap()),
+        end: Some("2026-03-04T17:00".parse().unwrap()),
+        ..Default::default()
+    };
+    let w = calendar::create(&a.store, &family.to_string(), &input, "Europe/Amsterdam", "swim", 1_000).unwrap();
+    a.synced().await;
+    let swim = objects::get(&db.pool, anna, family, &w.name).await.unwrap().body;
+    assert!(swim.contains("SUMMARY:Swim") && swim.contains("TZID=Europe/Amsterdam"), "{swim}");
 
     // Unshared while B has an edit waiting: the calendar goes, the edit
     // becomes a conflict, nothing else breaks.

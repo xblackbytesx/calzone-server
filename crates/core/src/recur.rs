@@ -16,6 +16,11 @@
 //!    Thunderbird and Google) leaves the original instance in place and the
 //!    moved one is added: a duplicate. SEQUENCE never affects dates, so the
 //!    copy calcard reads has no SEQUENCE lines.
+//! 5. calcard expands in wall time and compares a UTC (`Z`) `UNTIL` as if
+//!    it were one, so a series in a zone east of UTC lost its last
+//!    occurrence when `UNTIL` is that occurrence's exact instant (as
+//!    Thunderbird and CalZone's own editor write it). In the copy calcard
+//!    reads, such an `UNTIL` is the series zone's wall time.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -107,7 +112,7 @@ pub fn expand(
     viewer: chrono_tz::Tz,
 ) -> Result<Expansion, ExpandError> {
     let doc = Document::parse(text).ok();
-    let for_calcard = doc.as_ref().map(without_sequence);
+    let for_calcard = doc.as_ref().map(calcard_copy);
     let Entry::ICalendar(cal) = Parser::new(for_calcard.as_deref().unwrap_or(text)).entry() else {
         return Err(ExpandError::NotCalendar);
     };
@@ -172,7 +177,10 @@ pub fn expand(
 
 /// The object without SEQUENCE in its scheduling components (fix 4). Only
 /// properties go, never components, so calcard's component ids still line up.
-fn without_sequence(doc: &Document) -> String {
+/// The text calcard reads: no SEQUENCE lines (fix 4), and a UTC `UNTIL` of
+/// a zoned series as that zone's wall time (fix 5).
+fn calcard_copy(doc: &Document) -> String {
+    let original = doc;
     let mut doc = doc.clone();
     for cal in doc.components.iter_mut() {
         for item in cal.items.iter_mut() {
@@ -180,10 +188,64 @@ fn without_sequence(doc: &Document) -> String {
                 && matches!(c.name.as_str(), "VEVENT" | "VTODO" | "VJOURNAL")
             {
                 c.items.retain(|i| !matches!(i, Item::Property(l) if l.name() == "SEQUENCE"));
+                let tzid = c
+                    .property("DTSTART")
+                    .filter(|l| !l.value().trim().ends_with(['Z', 'z']))
+                    .and_then(|l| l.param("TZID"));
+                let Some(tzid) = tzid else { continue };
+                for i in c.items.iter_mut() {
+                    if let Item::Property(l) = i
+                        && l.name() == "RRULE"
+                        && let Some(v) = wall_until(l.value(), &tzid, original)
+                    {
+                        *l = crate::lines::Line::new(format!("RRULE:{v}"));
+                    }
+                }
             }
         }
     }
     doc.to_string()
+}
+
+/// A rule whose `UNTIL` is UTC, with that `UNTIL` as wall time in `tzid`;
+/// `None` when there is nothing to change or the zone is unknown.
+fn wall_until(rule: &str, tzid: &str, doc: &Document) -> Option<String> {
+    let mut changed = false;
+    let parts: Vec<String> = rule
+        .split(';')
+        .map(|p| {
+            let Some((k, v)) = p.split_once('=') else { return p.to_string() };
+            if !k.eq_ignore_ascii_case("UNTIL") {
+                return p.to_string();
+            }
+            let Some(utc) = v.trim().strip_suffix(['Z', 'z']).and_then(crate::moment::parse_naive) else {
+                return p.to_string();
+            };
+            match utc_to_wall(utc, tzid, doc) {
+                Some(w) => {
+                    changed = true;
+                    format!("{k}={}", w.format("%Y%m%dT%H%M%S"))
+                }
+                None => p.to_string(),
+            }
+        })
+        .collect();
+    changed.then(|| parts.join(";"))
+}
+
+/// A UTC instant as wall time in a zone: the IANA database, else the
+/// object's own VTIMEZONE.
+fn utc_to_wall(utc: NaiveDateTime, tzid: &str, doc: &Document) -> Option<NaiveDateTime> {
+    if let Ok(tz) = tzid.parse::<chrono_tz::Tz>() {
+        return Some(tz.from_utc_datetime(&utc).naive_local());
+    }
+    doc.components.iter().flat_map(|cal| cal.components()).find_map(|c| {
+        if c.name != "VTIMEZONE" || c.property("TZID").is_none_or(|l| l.value() != tzid) {
+            return None;
+        }
+        let z = VZone::from_component(c).ok()?;
+        Some(utc + Duration::seconds(i64::from(z.offset_at_utc(utc))))
+    })
 }
 
 fn text_of(comp: &ICalendarComponent, name: &ICalendarProperty) -> Option<String> {
@@ -380,6 +442,25 @@ mod tests {
         let utc: Vec<NaiveDateTime> = got.iter().map(|w| w.instant(chrono_tz::UTC)).collect();
         assert_eq!(utc, vec![dt("2026-10-19 07:00"), dt("2026-10-26 08:00"), dt("2026-11-02 08:00")]);
         assert!(matches!(got[1], When::Zoned { local, .. } if local == dt("2026-10-26 09:00")));
+    }
+
+    #[test]
+    fn a_utc_until_keeps_the_last_occurrence_of_a_zoned_series() {
+        // UNTIL is the last lesson's exact instant (16:00 in Amsterdam is
+        // 14:00 UTC in summer), as Thunderbird and our editor write it.
+        for zone in ["Europe/Amsterdam", "My Custom Zone"] {
+            let vtz = AMS.replace("TZID:Europe/Amsterdam", &format!("TZID:{zone}"));
+            let text = cal(&format!(
+                "{vtz}BEGIN:VEVENT\r\nUID:u\r\nDTSTART;TZID={zone}:20260610T160000\r\nDTEND;TZID={zone}:20260610T170000\r\nRRULE:FREQ=WEEKLY;UNTIL=20260701T140000Z\r\nEND:VEVENT\r\n"
+            ));
+            let got: Vec<NaiveDateTime> =
+                starts(&text, chrono_tz::UTC).iter().map(|w| w.instant(chrono_tz::UTC)).collect();
+            assert_eq!(got.len(), 4, "{zone}: {got:?}");
+            assert_eq!(got.last(), Some(&dt("2026-07-01 14:00")), "{zone}");
+            // One second earlier, and the last one goes.
+            let early = text.replace("UNTIL=20260701T140000Z", "UNTIL=20260701T135959Z");
+            assert_eq!(starts(&early, chrono_tz::UTC).len(), 3, "{zone}");
+        }
     }
 
     #[test]

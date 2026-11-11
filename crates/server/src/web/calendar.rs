@@ -157,6 +157,9 @@ struct Initial<'a> {
     end_date: &'a str,
     end_time: &'a str,
     repeat: &'a str,
+    repeat_end: &'static str,
+    repeat_until: &'a str,
+    repeat_count: &'a str,
     location: &'a str,
     notes: &'a str,
     alarm: String,
@@ -172,6 +175,18 @@ struct PanelPage {
     calendars: Vec<Cal>,
     alarms: Vec<(String, &'static str)>,
     alarm_value: String,
+    /// `never`, `until` or `count`.
+    repeat_end: &'static str,
+}
+
+fn repeat_end(d: &EventDetail) -> &'static str {
+    if !d.repeat_until.is_empty() {
+        "until"
+    } else if !d.repeat_count.is_empty() {
+        "count"
+    } else {
+        "never"
+    }
 }
 
 fn alarm_value(d: &EventDetail) -> String {
@@ -198,12 +213,16 @@ fn panel(user: &WebUser, new: bool, d: EventDetail, calendars: Vec<Cal>) -> Page
         end_date: &d.end_date,
         end_time: &d.end_time,
         repeat: d.repeat,
+        repeat_end: repeat_end(&d),
+        repeat_until: &d.repeat_until,
+        repeat_count: &d.repeat_count,
         location: &d.location,
         notes: &d.description,
         alarm: alarm.clone(),
     };
     let initial = serde_json::to_string(&initial).expect("serializes");
-    html(PanelPage { t, new, d, initial, calendars, alarms: alarm_options(t), alarm_value: alarm })
+    let end = repeat_end(&d);
+    html(PanelPage { t, new, d, initial, calendars, alarms: alarm_options(t), alarm_value: alarm, repeat_end: end })
 }
 
 #[derive(Deserialize)]
@@ -294,6 +313,8 @@ pub async fn new_event(State(st): State<AppState>, user: WebUser, Query(q): Quer
         end_date: ed.format("%Y-%m-%d").to_string(),
         end_time: fmt_t(et).if_empty("10:00"),
         repeat: "none",
+        repeat_until: String::new(),
+        repeat_count: String::new(),
         recurring: false,
         alarm: None,
         alarm_kept: false,

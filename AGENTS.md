@@ -121,7 +121,23 @@ release workflow and its `docs/switch-over.md`; the switch itself, on both
 phones, and a few weeks of daily use are the owner's, and close 4a.
 Phase 4b planned 2026-11-10 (`docs/plan-phase-4b.md`, a draft for the
 owner): spike S6 (reminders) first, then steps 1 to 7. S6 decided
-2026-11-11 (decision 51).
+2026-11-11 (decision 51). Step 1 done 2026-11-11 (decision 52): the
+core's `view` shared by the web and the phone, repeats with an end on
+the web, `calzone_client::calendar` and its FFI, `PUT
+/sync/v1/collections/{id}/mine`, and recur's fix 5 (a UTC `UNTIL` of a
+zoned series kept its last occurrence); 258 workspace tests. Step 2
+done 2026-11-11: the agenda as the app's main screen (app decisions 23
+to 26), device-untested. Step 3 done 2026-11-11: day, week and month
+views (app decisions 27 to 29), device-untested. Step 4 done 2026-11-11:
+editing, quick add, the scope question, undo, and my layer per calendar
+(app decisions 30 and 31), device-untested. Step 5 done 2026-11-11:
+the app rings its own reminders (app decision 32) from the core's new
+`calendar::reminders` (each occurrence with its own part's VALARMs, start,
+end or fixed triggers; FFI `reminders`), device-untested. Step 6 done
+2026-11-11: search (`calendar::search`, FFI `search`), "add to calendar"
+and opening events from other apps, and two Glance widgets (app
+decisions 34 and 35), device-untested. Next: step 7, the household test
+and the release.
 
 ## Architecture
 
@@ -154,7 +170,7 @@ address), `audit` (the `auth_failure` line), `throttle` (login failure budgets),
 delete, changes_since; `app_passwords`: create, list, revoke, verify;
 `accounts`: passphrases, admins, sessions; `imports`: reports;
 `two_factor`: TOTP, recovery codes, secrets at rest; `prefs`: settings;
-`events`: occurrences, writes, undo; `contacts`: list, detail, writes,
+`events`: occurrences, writes, undo (on `calzone_core::view`); `contacts`: list, detail, writes,
 photos; `feeds`: secret links and the published feed; `subscriptions`:
 subscribed calendars, schedule, `replace`; `devices`: sign-in codes, device
 tokens, push endpoints; `sync`: the collection list, change batches,
@@ -174,7 +190,9 @@ calendar page), `calendar` (the page and the event panel), `contacts`, `feeds`
 Client modules: `store` (Store: collections, objects, pending, conflicts,
 local changes), `engine` (sign_in, sync, sign_out, push registration),
 `transport` (the app's HTTP), `link` (the sign-in address), `bridge`
-(Android's calendar and contact rows and edits).
+(Android's calendar and contact rows and edits), `calendar` (the app's
+own screens: occurrences with an Expansions cache, event, create, update,
+remove, undo, quick_add, set_mine).
 
 Dav modules: `xml` (namespaced tree, escaping), `path` (URL space, hrefs),
 `request` (PROPFIND, PROPPATCH, MKCOL/MKCALENDAR, REPORT bodies), `filter`
@@ -185,7 +203,9 @@ Core modules: `android` (rows, apply, new_event: Android's calendar), `android_c
 Occurrence, Warning), `vtimezone` (VZone), `split` (split, merge,
 UserLayer), `import` (decode, split_calendar, split_cards, assemble),
 `moment` (Moment, Key, VTIMEZONE generation), `edit` (EventChange, Scope,
-edit, delete, new_event), `quickadd` (parse, Lang), `card` (read, apply,
+edit, delete, new_event), `view` (occurrences, detail, change_for,
+EventInput, Repeat, quick_draft, initials: the calendar as a person sees
+it, for the web and the phone), `quickadd` (parse, Lang), `card` (read, apply,
 new_card), `feed` (object_for_feed, publish: full or busy-only). Per-user items: VALARM, `X-MOZ-LASTACK`, `X-MOZ-SNOOZE-TIME`
 and `X-MOZ-SNOOZE-TIME-*`; `X-MOZ-GENERATION` stays shared.
 
@@ -1292,6 +1312,63 @@ Settled 2026-11-06:
       time zone change (`TIMEZONE_CHANGED` arrives for manifest
       receivers, documented). Both are checked in step 5, the reminder
       step.
+52. **The core and the sync API for the phone's screens (phase 4b step
+    1, 2026-11-11).**
+    - **`calzone_core::view`** is the calendar as a person sees it,
+      moved out of the server's `domain::events` so the web and the phone
+      run the same code: occurrences in the viewer's wall-clock time,
+      one event as the editor shows it (`detail`), the editor's input as
+      an `EventChange` (`change_for`: each event keeps its own kind of
+      time, decision 37), quick add's draft, the reminder presets, the
+      default color and owner initials.
+    - **Repeats with an end:** `Repeat { freq, until | count }` builds
+      the RRULE. `UNTIL` is the series start's own form at the start's
+      time on the chosen day, so that day keeps its occurrence. The
+      editor reads back `FREQ=X` with `INTERVAL=1`, `WKST`, `UNTIL` or
+      `COUNT`; anything else is `custom` and kept as it is. The web panel
+      has a "Stops" field (never, on a day, after a number of times); the
+      API takes `repeat` next to the old `rrule`.
+    - **Recur's fix 5:** calcard expands in wall time and compared a UTC
+      `UNTIL` as if it were one, so a zoned series east of UTC lost its
+      last occurrence when `UNTIL` is that occurrence's exact instant (as
+      Thunderbird and our editor write it). The copy calcard reads now
+      has such an `UNTIL` as the zone's wall time (IANA, else the
+      object's VTIMEZONE). The household corpus has no such series.
+    - **`calzone_client::calendar`:** occurrences of the calendars this
+      phone shows (switched off here: left out), with the person's own
+      name and color per calendar and the owner's initials; the event
+      sheet; create (the calendar's default reminder applies), update
+      with scope, remove; a reminder-only change is allowed on a view-only
+      calendar, any other write there is refused on the phone as the
+      server would. Each write returns what it replaced; `undo` restores
+      it unless something changed it since. App edits go through
+      `Store::edit_here`, which also logs a local change, so Android's
+      calendar shows them at once, offline too.
+    - **Expansion cache:** calcard has no "from", so an open-ended series
+      costs its whole history on every call: a month of the household's
+      185 events took about 140 ms on a desk machine (36 series hit the
+      1024 limit). `Expansions` keeps each event's occurrences over a
+      window (400 days back, 800 ahead), keyed by its text and the
+      phone's zone: a cold month 129 ms once per process, then 0.7 ms a
+      month (release build, desk machine). The app warms it in the
+      background at start (step 2).
+    - **The person's own view from the phone:** `PUT
+      /sync/v1/collections/{id}/mine` replaces it as a whole (the web's
+      calendar settings sheet does the same; push tells their other
+      devices). The phone keeps a change in `collections.mine` (store
+      schema 2) and shows it at once; the next sync run sends it before
+      listing, and drops it when the server refuses it (400, 404). Week
+      start, 24-hour clock, zone and language follow the phone's own
+      settings, not the web's.
+    - **FFI:** `occurrences`, `event`, `create_event`, `update_event`,
+      `delete_event` (JSON input as the web API's, scope `this`,
+      `following`, `all`), `undo` (one write at a time, by id),
+      `quick_add`, `set_mine`.
+    - **Known gap:** a "this and following" change made on the phone
+      makes the new series as an upload; the server does not know it
+      came from a split, so other people's series-wide reminders stay
+      with the old series (the web carries them over, decision 37).
+      Fixed when it matters, in the server's upload.
 
 ## Roadmap
 

@@ -352,8 +352,6 @@
     loadPanel("/calendar/event/new?" + q.toString());
   }
 
-  var REPEAT = { none: null, daily: "FREQ=DAILY", weekly: "FREQ=WEEKLY", monthly: "FREQ=MONTHLY", yearly: "FREQ=YEARLY" };
-
   function formValues(form) {
     var f = form.elements;
     return {
@@ -364,6 +362,9 @@
       end_date: f.end_date.value,
       end_time: f.end_time.value,
       repeat: f.repeat.value,
+      repeat_end: f.repeat_end.value,
+      repeat_until: f.repeat_until.value,
+      repeat_count: f.repeat_count.value,
       location: f.location.value,
       notes: f.notes.value,
       alarm: f.alarm.value
@@ -388,9 +389,21 @@
         b.end = v.end_date + "T" + (v.end_time || v.start_time || "10:00");
       }
     }
-    if (changed("repeat") && v.repeat !== "custom") b.rrule = REPEAT[v.repeat] || null;
+    var repeatChanged = ["repeat", "repeat_end", "repeat_until", "repeat_count"].some(changed);
+    if (repeatChanged && v.repeat !== "custom") b.repeat = repeatOf(v);
     if (changed("alarm") && v.alarm !== "keep") b.alarms = v.alarm === "none" ? [] : [parseInt(v.alarm, 10)];
     return b;
+  }
+
+  /** One of the panel's repeats with its end, or null for none. An end
+      left empty means it never stops. */
+  function repeatOf(v) {
+    if (v.repeat === "none") return null;
+    var r = { freq: v.repeat };
+    var n = parseInt(v.repeat_count, 10);
+    if (v.repeat_end === "until" && v.repeat_until) r.until = v.repeat_until;
+    if (v.repeat_end === "count" && n > 0) r.count = Math.min(n, 1000);
+    return r;
   }
 
   function save(form) {
@@ -589,6 +602,15 @@
     }
     if (e.target.name === "all_day") {
       panel.querySelectorAll("[data-timed]").forEach(function (el) { el.hidden = e.target.checked; });
+    }
+    // The end of a repeat: only for the panel's own repeats, and only the
+    // field the chosen end needs.
+    if (e.target.name === "repeat" || e.target.name === "repeat_end") {
+      var g = e.target.form.elements;
+      var end = panel.querySelector("[data-repeat-end]");
+      if (end) end.hidden = g.repeat.value === "none" || g.repeat.value === "custom";
+      g.repeat_until.hidden = g.repeat_end.value !== "until";
+      g.repeat_count.hidden = g.repeat_end.value !== "count";
     }
     // Moving the start keeps the end after it.
     if (e.target.name === "start_date") {

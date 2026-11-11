@@ -1,5 +1,7 @@
 //! One sync run against `/sync/v1` (decision 47):
 //!
+//! 0. Send the person's own views of collections changed on this phone
+//!    (name, color, default reminder), so the list below already has them.
 //! 1. List the collections (new ones appear, gone ones go, with any edits
 //!    waiting in them reported).
 //! 2. Upload every pending edit, per collection, in chunks; apply the
@@ -135,6 +137,17 @@ pub fn unregister_push(t: &dyn Transport) -> Result<()> {
 pub fn sync(store: &Store, t: &dyn Transport, now: i64) -> Result<Report> {
     let before = store.conflicts()?.len();
     let mut report = Report::default();
+
+    for (collection, mine) in store.pending_mine()? {
+        let body = serde_json::to_string(&mine).expect("serializable");
+        let r = send(t, Method::Put, format!("/sync/v1/collections/{collection}/mine"), Some(body))?;
+        match r.status {
+            200..=299 => store.mine_sent(&collection, &mine, true)?,
+            // Gone, or a value the server refuses: back to the server's.
+            400 | 404 => store.mine_sent(&collection, &mine, false)?,
+            _ => return Err(refused(r)),
+        }
+    }
 
     let list: Collections = decode(send(t, Method::Get, "/sync/v1/collections".into(), None)?)?;
     report.collections = list.collections.len();
