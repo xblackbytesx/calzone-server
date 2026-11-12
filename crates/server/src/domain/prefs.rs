@@ -54,8 +54,8 @@ pub async fn update_settings(pool: &PgPool, user: Actor, c: &SettingsChange) -> 
     if c.language.as_ref().is_some_and(|l| l.as_deref().is_some_and(|l| !matches!(l, "en" | "nl"))) {
         return Err(bad("the language must be en or nl"));
     }
-    if c.theme.as_deref().is_some_and(|t| !matches!(t, "dark" | "light" | "system")) {
-        return Err(bad("the theme must be dark, light or system"));
+    if c.theme.as_deref().is_some_and(|t| !matches!(t, "dark" | "black" | "light" | "system")) {
+        return Err(bad("the theme must be dark, black, light or system"));
     }
     if c.week_start.is_some_and(|w| !(1..=7).contains(&w)) {
         return Err(bad("the week starts on day 1 to 7"));

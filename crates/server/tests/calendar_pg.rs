@@ -364,7 +364,13 @@ async fn the_calendar_page_and_its_panel() {
     assert!(page.contains("/static/event-calendar.min.js") && page.contains("data-view=\"timeGridWeek\""));
     // Month and days (decision 54): first in the switcher, with its own small month.
     assert!(page.contains(r#"data-view="monthDays">Month and days<"#) && page.contains(r#"id="cal-mini""#));
-    assert!(page.contains("Add: dentist thu 3pm") && page.contains("&#34;first_day&#34;:1"));
+    assert!(page.contains("&#34;first_day&#34;:1"));
+    // Decision 55: the views are one menu, and quick add lives in a new event's panel.
+    assert!(page.contains(r#"<details class="cal-views" id="cal-views">"#) && !page.contains(r#"id="cal-quick""#));
+    // The Black theme (migration 0012) reaches <html> and keeps a dark color scheme.
+    anna.post("/api/settings", json!({ "theme": "black" })).await;
+    let (_, page) = anna.page("/calendar").await;
+    assert!(page.contains(r#"data-theme="black""#) && page.contains(r#"content="dark""#), "black theme");
     // The browser's language until set; a theme setting reaches <html>.
     anna.lang = Some("nl-NL,nl;q=0.9");
     anna.post("/api/settings", json!({ "theme": "light" })).await;
@@ -391,6 +397,7 @@ async fn the_calendar_page_and_its_panel() {
             && panel.contains(r#"name="start_time" value="09:00""#)
     );
     assert!(panel.contains(r#"name="end_time" value="10:30""#) && panel.contains("Swim &#38; sauna"));
+    assert!(!panel.contains("ev-quick"), "quick add only for a new event");
     assert!(panel.contains(r#"<option value="weekly" selected>"#) && panel.contains(r#"<option value="15" selected>"#));
     assert!(panel.contains(r#"data-recurring="1""#) && panel.contains(r#"data-instance="20260112T090000""#));
     assert!(panel.contains("Alleen jij krijgt deze."), "Dutch in the panel too");
@@ -407,6 +414,10 @@ async fn the_calendar_page_and_its_panel() {
     let (_, panel) = anna.page("/calendar/event/new?start=2026-01-07T14:00").await;
     assert!(panel.contains(r#"name="start_time" value="14:00""#) && panel.contains(r#"name="end_time" value="15:00""#));
     assert!(panel.contains(&format!(r#"<option value="{cal}">"#)));
+    assert!(
+        panel.contains(r#"<form id="ev-quick""#) && panel.contains("Toevoegen: tandarts do 15u"),
+        "quick add fills a new event"
+    );
     let (_, panel) = anna.page("/calendar/event/new?start=2026-01-07&end=2026-01-10&all_day=1").await;
     assert!(panel.contains(r#"name="end_date" value="2026-01-09""#) && panel.contains("value=\"1\" checked"));
     // Bob cannot add to a read-only calendar, and has no other.

@@ -336,10 +336,11 @@ pub struct Nav {
     pub a: &'static i18n::A,
 }
 
-/// A stored theme as one of the three values the CSS knows.
+/// A stored theme as one of the four values the CSS knows.
 pub fn theme(stored: &str) -> &'static str {
     match stored {
         "light" => "light",
+        "black" => "black",
         "system" => "system",
         _ => "dark",
     }

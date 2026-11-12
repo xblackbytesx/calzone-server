@@ -32,6 +32,8 @@
   var toastEl = document.getElementById("cal-toast");
   var titleEl = document.getElementById("cal-title");
   var mini = document.getElementById("cal-mini");
+  var viewMenu = document.getElementById("cal-views");
+  var viewName = document.getElementById("cal-view-name");
   var main = document.getElementById("cal-main");
   // "monthDays" is ours (decision 54): the small month over EventCalendar's
   // month list. The rest are EventCalendar's own views.
@@ -315,7 +317,12 @@
     url.searchParams.set("date", date);
     history.replaceState(null, "", url);
     root.querySelectorAll("[data-view]").forEach(function (b) {
-      b.setAttribute("aria-pressed", b.getAttribute("data-view") === mode ? "true" : "false");
+      var on = b.getAttribute("data-view") === mode;
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      if (on) {
+        viewName.textContent = b.firstChild.textContent;
+        viewMenu.querySelector("summary").setAttribute("aria-label", T.views + ": " + b.firstChild.textContent);
+      }
     });
     mini.hidden = mode !== "monthDays";
     main.classList.toggle("month-days", mode === "monthDays");
@@ -510,7 +517,8 @@
     panel.innerHTML = html;
     panel.hidden = false;
     document.body.classList.add("cal-panel-open");
-    var first = panel.querySelector("input[name=title]");
+    // A new event starts in quick add; the form is right under it.
+    var first = panel.querySelector("#ev-quick input, input[name=title]");
     if (first && !first.disabled && !first.value) first.focus();
     else (panel.querySelector("[data-cal=close]") || panel).focus();
   }
@@ -646,6 +654,7 @@
 
   panel.addEventListener("submit", function (e) {
     if (e.target.id === "ev-form") { e.preventDefault(); save(e.target); }
+    if (e.target.id === "ev-quick") { e.preventDefault(); quickFill(e.target); }
     if (e.target.id === "cal-prefs") { e.preventDefault(); savePrefs(e.target); }
     if (e.target.classList.contains("cal-share")) { e.preventDefault(); share(e.target); }
     if (e.target.id === "cal-link") { e.preventDefault(); makeLink(e.target); }
@@ -810,28 +819,35 @@
     }
   });
 
-  // ---- Quick add ------------------------------------------------------------
+  // ---- Quick add (in a new event's panel, decision 55) -------------------------
 
-  var quick = document.getElementById("cal-quick");
-  if (quick) {
-    quick.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var input = quick.elements.text;
-      var text = input.value.trim();
-      if (!text) return;
-      api("POST", "/api/quickadd", { text: text }).then(function (r) {
-        if (!r.ok) { failed(r); return; }
-        var d = r.data;
-        if (!d.start || !C.calendars.length) { openNew({ title: d.title }); return; }
-        api("POST", "/api/events", { collection: C.calendars[0].id, summary: d.title, start: d.start, end: d.end }).then(function (w) {
-          if (w.ok) {
-            input.value = "";
-            toast(T.msg_added + " " + d.title, w.data.change_id);
-            cal.setOption("date", d.start.slice(0, 10));
-            refresh();
-          } else { failed(w); }
-        });
-      });
+  /** "dentist thu 3pm" read by the server, then put in the form: nothing is
+      saved until Save, so what it understood can be checked first. */
+  function quickFill(form) {
+    var input = form.elements.text;
+    var text = input.value.trim();
+    var ev = document.getElementById("ev-form");
+    if (!text || !ev) return;
+    api("POST", "/api/quickadd", { text: text }).then(function (r) {
+      if (!r.ok) { failed(r); return; }
+      var d = r.data, f = ev.elements;
+      f.title.value = d.title;
+      if (d.start) {
+        f.all_day.checked = d.all_day;
+        f.all_day.dispatchEvent(new Event("change", { bubbles: true }));
+        f.start_date.value = d.start.slice(0, 10);
+        if (d.all_day) {
+          // The form shows the last day; the server sends the day after.
+          f.end_date.value = d.end ? addDays(d.end.slice(0, 10), -1) : f.start_date.value;
+        } else {
+          f.start_time.value = d.start.slice(11, 16);
+          var end = d.end || d.start;
+          f.end_date.value = end.slice(0, 10);
+          f.end_time.value = end.slice(11, 16);
+        }
+      }
+      input.value = "";
+      f.title.focus();
     });
   }
 
@@ -861,6 +877,8 @@
   }
 
   function onClick(e) {
+    // The view menu closes on a choice or a click anywhere else.
+    if (viewMenu.open && !e.target.closest("#cal-views > summary")) viewMenu.open = false;
     var b = e.target.closest("[data-cal], [data-view], [data-mini]");
     if (!b) return;
     if (b.hasAttribute("data-mini")) { pick(b.getAttribute("data-mini")); return; }
@@ -886,6 +904,7 @@
 
   function onKey(e) {
     if (e.ctrlKey || e.metaKey || e.altKey || scopeDialog.open) return;
+    if (e.key === "Escape" && viewMenu.open) { viewMenu.open = false; viewMenu.querySelector("summary").focus(); return; }
     if (e.key === "Escape" && !panel.hidden) { closePanel(); return; }
     var tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;

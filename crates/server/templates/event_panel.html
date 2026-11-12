@@ -5,6 +5,12 @@
   </header>
   <p class="meta sheet-meta"><svg class="swatch" viewBox="0 0 1 1" aria-hidden="true"><rect width="1" height="1" fill="{{ d.color }}"/></svg> {% if new %}{{ t.calendar }}{% else %}{{ d.calendar }}{% if !d.own %} · {{ t.from_owner }} {{ d.owner }}{% endif %}{% endif %}</p>
   {% if !d.editable %}<p class="notice">{{ t.read_only }}</p>{% endif %}
+  {#- Quick add fills the form below; nothing is saved until Save (decision 55). -#}
+  {% if new %}<form id="ev-quick" class="ev-quick" autocomplete="off">
+    <input type="text" name="text" placeholder="{{ t.quick_add_placeholder }}" aria-label="{{ t.quick_add }}" maxlength="500" enterkeyhint="go">
+    <button type="submit" class="compact">{{ t.quick_fill }}</button>
+  </form>
+  <p class="hint ev-quick-hint">{{ t.quick_add_hint }}</p>{% endif %}
   <form id="ev-form" class="form" data-new="{% if new %}1{% endif %}" data-collection="{{ d.collection }}" data-name="{{ d.name }}" data-etag="{{ d.etag }}" data-instance="{% if let Some(i) = d.instance %}{{ i }}{% endif %}" data-recurring="{% if d.recurring %}1{% endif %}" data-readonly="{% if !d.editable %}1{% endif %}" data-initial="{{ initial }}">
     <fieldset class="sheet-fields"{% if !d.editable %} disabled{% endif %}>
       <label class="field">{{ t.title }} <input type="text" name="title" value="{{ d.title }}" maxlength="500" required></label>

@@ -32,6 +32,7 @@
   :root { color-scheme: dark; }
   :root[data-theme="light"] { color-scheme: light; }
   :root[data-theme="system"] { color-scheme: light dark; }
+  :root[data-theme="black"] { color-scheme: dark; }
   :root {
 
     /* Color roles. light-dark() keeps both themes in one place. */
@@ -51,6 +52,8 @@
     --good-tint: color-mix(in oklab, var(--good) 14%, var(--surface));
     --caution-tint: color-mix(in oklab, var(--caution) 16%, var(--surface));
     --danger-tint: color-mix(in oklab, var(--danger) 12%, var(--surface));
+    /* Today in the calendar: light enough that the hour lines still show. */
+    --today-tint: color-mix(in oklab, var(--accent) 7%, var(--surface));
 
     /* Type: system fonts, a rem scale; headings breathe a little on big screens. */
     --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
@@ -81,6 +84,14 @@
     /* Admin pages are forms and lists: a centered, comfortable width. */
     --page: 72rem;
     --measure: 65ch;
+  }
+  /* Black (decision 55): Dark's colors on a true black canvas for OLED
+     screens, surfaces lifted just enough to tell apart, as in the app. */
+  :root[data-theme="black"] {
+    --canvas: #000000;
+    --surface: #0e0e11;
+    --surface-sunken: #18181d;
+    --line: #2a2a31;
   }
 }
 
@@ -442,11 +453,26 @@
   .cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); }
   .cal-nav { display: flex; align-items: center; gap: var(--space-3xs); flex: 1 1 auto; min-inline-size: 0; }
   .cal-title { flex: 1 1 auto; min-inline-size: 0; font-size: var(--step-1); margin-inline-start: var(--space-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cal-views { display: flex; gap: 0; border: var(--hairline); border-radius: var(--radius-s); overflow: hidden; }
-  .cal-views button { border: 0; border-radius: 0; background: transparent; color: var(--text-quiet); }
-  .cal-views button[aria-pressed=true] { background: var(--accent-tint); color: var(--text); font-weight: 600; }
-  .cal-quick { flex: 1 1 14rem; display: flex; }
-  .cal-quick input { inline-size: 100%; }
+  /* The view menu (decision 55): the current view, opening a short list. */
+  .cal-views { position: relative; }
+  .cal-views > summary { list-style: none; inline-size: auto; gap: var(--space-2xs); }
+  .cal-views > summary::-webkit-details-marker { display: none; }
+  .cal-views-caret { font-size: 0.8em; color: var(--text-quiet); }
+  .cal-views[open] > summary { background: var(--accent-tint); }
+  .cal-views-list {
+    position: absolute; inset-block-start: calc(100% + var(--space-3xs)); inset-inline-end: 0; z-index: 20;
+    display: grid; min-inline-size: 13rem; padding: var(--space-3xs);
+    border: var(--hairline); border-radius: var(--radius-m); background: var(--surface);
+    box-shadow: 0 0.5rem 1.5rem color-mix(in oklab, black 35%, transparent);
+  }
+  .cal-views-list > button { justify-content: space-between; color: var(--text); font-weight: 400; }
+  .cal-views-list > button[aria-pressed=true] { background: var(--accent-tint); font-weight: 600; }
+  .cal-views-list kbd { font-family: var(--font-mono); font-size: var(--step--1); color: var(--text-quiet); }
+  /* Quick add at the top of a new event's panel: it fills the form. */
+  .ev-quick { display: flex; gap: var(--space-2xs); }
+  .ev-quick > input { flex: 1 1 auto; min-inline-size: 0; }
+  .ev-quick > button { white-space: nowrap; }
+  .ev-quick-hint { margin-block-start: calc(-1 * var(--space-2xs)); }
   .cal-grid { block-size: max(26rem, calc(100dvb - 13rem)); min-inline-size: 0; }
 
   /* The calendar list: beside the grid on a desk, above it on a phone, and
@@ -513,10 +539,9 @@
     .cal-nav { flex-wrap: wrap; }
     .cal-title { order: -1; flex-basis: 100%; margin-inline-start: 0; }
     .cal-new-text { display: none; }
-    .cal-quick { order: 5; flex-basis: 100%; }
+    /* The menu sits at the start of its row here; open it from there. */
+    .cal-views-list { inset-inline: 0 auto; }
     .cal-grid { block-size: max(24rem, calc(100dvb - 15rem)); }
-    .cal-views { inline-size: 100%; }
-    .cal-views button { flex: 1 1 0; min-inline-size: min-content; padding-inline: var(--space-3xs); line-height: 1.1; }
     .cal-main.month-days .cal-grid { block-size: max(16rem, calc(100dvb - 33rem)); }
   }
 
@@ -582,7 +607,7 @@
   --ec-bg-color: var(--surface);
   --ec-text-color: var(--text);
   --ec-border-color: var(--line);
-  --ec-today-bg-color: var(--accent-tint);
+  --ec-today-bg-color: var(--today-tint);
   --ec-highlight-color: color-mix(in oklab, var(--accent) 22%, transparent);
   --ec-now-indicator-color: var(--danger);
   --ec-popup-bg-color: var(--surface);
@@ -605,8 +630,24 @@
 .cal .ec.ec-time-grid .ec-event.cal-ev-short { padding-block: 0; }
 .cal .ec.ec-time-grid .cal-ev-short .ec-event-body { white-space: nowrap; text-overflow: ellipsis; }
 .cal .ec.ec-time-grid .cal-ev-tiny .ec-event-body { font-size: 0.8em; line-height: 1; }
+/* Today (decision 55): a light tint so the hour lines still show, and
+   the date in a filled accent pill, which reads by brightness as well as
+   hue (not only for color-blind eyes). */
+.cal .ec .ec-col-head.ec-today > time,
+.cal .ec:not(.ec-list) .ec-day.ec-today > .ec-day-head > time {
+  display: inline-block;
+  padding: 0.1em 0.55em;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+@media (max-width: 40rem) {
+  /* Narrow columns: the pill shrinks with them, as the other days do. */
+  .cal .ec .ec-col-head.ec-today > time { padding-inline: 0.2em; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+}
 /* Its own built-in shades switch on a polyfill pair; set it from our theme. */
-:root[data-theme="dark"] .cal .ec { --lightningcss-light: ; --lightningcss-dark: initial; }
+:root:is([data-theme="dark"], [data-theme="black"]) .cal .ec { --lightningcss-light: ; --lightningcss-dark: initial; }
 :root[data-theme="light"] .cal .ec { --lightningcss-light: initial; --lightningcss-dark: ; }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] .cal .ec { --lightningcss-light: ; --lightningcss-dark: initial; }

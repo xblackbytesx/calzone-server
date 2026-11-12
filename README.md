@@ -16,12 +16,20 @@ syncing as they always did. Built to replace Baikal.
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/month-light.png" alt="Month view in the light theme"></td>
-    <td><img src="docs/screenshots/event-dark.png" alt="The event panel: title, times, repeat, place, notes and your own reminders"></td>
+    <td><img src="docs/screenshots/month-days-black.png" alt="Month and days in the Black theme: a small month with a colored dot per calendar beside the list of its days"></td>
+    <td><img src="docs/screenshots/month-light.png" alt="Month view in the light theme, today's date in a filled pill"></td>
   </tr>
   <tr>
+    <td align="center">Month and days, Black theme for OLED screens</td>
     <td align="center">Month view, light theme</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/event-dark.png" alt="The event panel: title, times, repeat, place, notes and your own reminders"></td>
+    <td><img src="docs/screenshots/new-event-dark.png" alt="A new event: quick add has filled in the title, day and times from one typed line"></td>
+  </tr>
+  <tr>
     <td align="center">Editing an event</td>
+    <td align="center">Quick add fills in a new event</td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/feeds-dark.png" alt="Calendar settings with a new busy-only subscription link and its copy buttons"></td>
@@ -34,7 +42,7 @@ syncing as they always did. Built to replace Baikal.
 </table>
 
 <p align="center">
-  <img src="docs/screenshots/phone-agenda-dark.png" width="260" alt="The agenda on a phone">
+  <img src="docs/screenshots/phone-month-days-dark.png" width="260" alt="Month and days on a phone: the small month over the list of the day's events">
   &nbsp;
   <img src="docs/screenshots/phone-day-dark.png" width="260" alt="The day view on a phone">
 </p>
@@ -42,10 +50,11 @@ syncing as they always did. Built to replace Baikal.
 <sub>Screenshots show a made-up household.</sub>
 
 - **A calendar and contacts web app**: month and days, agenda, day, week
-  and month views with drag to move and resize, quick add ("dentist thu 3pm", also in
-  Dutch), undo after every change, recurring edits for one, following or
-  all occurrences, and a contacts book with search. English and Dutch,
-  dark by default, works on a phone.
+  and month views with drag to move and resize, quick add ("dentist thu
+  3pm", also in Dutch), undo after every change, recurring edits for one,
+  following or all occurrences, and a contacts book with search. English
+  and Dutch; dark by default, with light and an OLED black theme; works
+  on a phone.
 - **An Android app**: [CalZone for Android](https://github.com/xblackbytesx/calzone)
   signs in with a QR code from the Devices page and keeps everything on
   the phone, offline included. It has its own calendar (month and days,

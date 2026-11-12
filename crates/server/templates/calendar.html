@@ -11,17 +11,18 @@
       <button type="button" class="compact quiet" data-cal="next" aria-label="{{ nav.t.next }}">›</button>
       <h1 class="cal-title" id="cal-title">{{ nav.t.calendar_title }}</h1>
     </div>
-    <div class="cal-views" role="group" aria-label="{{ nav.t.views }}">
-      <button type="button" class="compact" data-view="monthDays">{{ nav.t.view_month_days }}</button>
-      <button type="button" class="compact" data-view="listMonth">{{ nav.t.view_agenda }}</button>
-      <button type="button" class="compact" data-view="timeGridDay">{{ nav.t.view_day }}</button>
-      <button type="button" class="compact" data-view="timeGridWeek">{{ nav.t.view_week }}</button>
-      <button type="button" class="compact" data-view="dayGridMonth">{{ nav.t.view_month }}</button>
-    </div>
+    {#- One menu instead of a row of five buttons (decision 55); keys 1 to 5 still pick them. -#}
+    <details class="cal-views" id="cal-views">
+      <summary class="button compact" aria-label="{{ nav.t.views }}"><span id="cal-view-name">{{ nav.t.view_week }}</span><span class="cal-views-caret" aria-hidden="true">▾</span></summary>
+      <div class="cal-views-list" role="group" aria-label="{{ nav.t.views }}">
+        <button type="button" class="quiet" data-view="monthDays">{{ nav.t.view_month_days }}<kbd aria-hidden="true">1</kbd></button>
+        <button type="button" class="quiet" data-view="listMonth">{{ nav.t.view_agenda }}<kbd aria-hidden="true">2</kbd></button>
+        <button type="button" class="quiet" data-view="timeGridDay">{{ nav.t.view_day }}<kbd aria-hidden="true">3</kbd></button>
+        <button type="button" class="quiet" data-view="timeGridWeek">{{ nav.t.view_week }}<kbd aria-hidden="true">4</kbd></button>
+        <button type="button" class="quiet" data-view="dayGridMonth">{{ nav.t.view_month }}<kbd aria-hidden="true">5</kbd></button>
+      </div>
+    </details>
     {% if has_calendar %}
-    <form class="cal-quick" id="cal-quick" autocomplete="off">
-      <input type="text" name="text" placeholder="{{ nav.t.quick_add_placeholder }}" aria-label="{{ nav.t.quick_add }}" maxlength="500" enterkeyhint="done">
-    </form>
     <button type="button" class="primary compact cal-new" data-cal="new" aria-label="{{ nav.t.new_event }}"><span aria-hidden="true">+</span><span class="cal-new-text"> {{ nav.t.new_event }}</span></button>
     {% endif %}
   </div>

@@ -144,7 +144,11 @@ owner runs it next. 2026-11-11, between the test's preparations: the
 web's navigation became Calendar, Contacts and Settings (decision 53,
 0.7.1), and the web got the app's month and days view (decision 54,
 prepared as 0.8.0), checked in headless Chromium at 360, 390 and 1280
-pixels wide in English and Dutch.
+pixels wide in English and Dutch. 2026-11-12, the owner's feedback on the
+calendar page: today readable, a Black theme, quick add in the new event's
+panel, the views as one menu (decision 55, migration 0012, prepared as
+0.9.0), checked in headless Chromium in dark, black and light at 1440 and
+360 pixels wide.
 
 ## Architecture
 
@@ -734,8 +738,9 @@ Settled 2026-11-06:
       - today, back and forward, and the title;
       - agenda, day, week and month (phone default agenda, desk default
         week; since decision 54 month and days comes first and is the
-        phone default);
-      - quick add, and "+".
+        phone default; since decision 55 one menu);
+      - quick add, and "+" (since decision 55 quick add is in the new
+        event's panel).
       The view and date live in the URL.
     - **`static/calendar.js`** feeds the grid from `/api/occurrences`:
       - a drag shows at once and snaps back if refused; a recurring event
@@ -1387,7 +1392,7 @@ Settled 2026-11-06:
     Devices, Import & export and People (admins only), wrapping on a
     phone. Log out moved to the bottom of Account. Pages and addresses
     are unchanged. The calendar's "make a calendar first" points to
-    Settings. The README screenshots still show the old header. Released
+    Settings. The README screenshots were retaken with 0.9.0 (decision 55). Released
     as 0.7.1 (web only; the app keeps `czCoreRef=v0.7.0`).
 54. **The web has the app's month and days view (2026-11-11, the owner's
     request).** A small month over the month's list, as in the app (app
@@ -1426,6 +1431,36 @@ Settled 2026-11-06:
       element, as the grid's scroll boxes start afresh) gives them to
       the script; vertical scrolling and zoom stay the browser's.
     Prepared as 0.8.0 (web only; no migrations; the app keeps
+    `czCoreRef=v0.7.0`).
+55. **The calendar page tidied (2026-11-12, the owner's feedback).**
+    - **Today reads by brightness, not only hue.** Its column had the
+      same tint as a pressed button (`--accent-tint`, 14%), and the hour
+      lines all but vanished in it. Now the
+      column is `--today-tint` (7%), so the lines show, and the date in
+      the heading (week, day, month) is a filled accent pill with
+      `--on-accent` text, shrinking with a phone's narrow columns.
+    - **A Black theme** for OLED screens, next to dark, light and system
+      (Settings, Account), as in the app (app decision 36): Dark's
+      colors on a `#000` canvas, surfaces lifted just enough to tell
+      apart (`#0e0e11`, `#18181d`, lines `#2a2a31`), color scheme dark,
+      EventCalendar's own shades set as for dark. Migration 0012 widens
+      the `principals.theme` check; `prefs` and `web::theme` accept
+      `black`.
+    - **Quick add moved into the new event's panel**, as in the app. In
+      the toolbar it saved at once into the first calendar, out of
+      sight, so it was hard to tell what it did. Now "Fill in" puts what
+      it read (title, all day, start, end) in the form, and nothing is
+      saved until Save, so a misread can be fixed first. A new event's
+      panel opens with the cursor in it.
+    - **The five view buttons are one menu**: a button with the current
+      view and a caret opens the list (a `<details>`, keys 1 to 5 shown
+      beside each), closed by a choice, a click elsewhere or Esc. The
+      keys still switch views directly.
+    The README screenshots were retaken for it, on the same made-up
+    household as before (Anna and Bram de Vries, generated contacts, a
+    school holidays feed), adding month and days in Black, quick add and
+    month and days on a phone.
+    Prepared as 0.9.0 (migration 0012; the app keeps
     `czCoreRef=v0.7.0`).
 
 ## Roadmap
