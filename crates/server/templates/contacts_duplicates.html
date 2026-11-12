@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+{% block title %}{{ c.dups }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ c.dups }}</h1><p class="meta">{{ c.dups_intro }}</p></div>
+<div class="page-actions"><a class="button quiet" href="/contacts">{{ nav.t.contacts_title }}</a></div></header>
+{% if let Some(a) = apart %}<div class="notice ok notice-undo" role="status"><span>{{ c.marked_apart }}</span><form method="post" action="/contacts/duplicates/together"><input type="hidden" name="book" value="{{ a.book }}">{% for n in a.names %}<input type="hidden" name="n" value="{{ n }}">{% endfor %}<button type="submit" class="compact">{{ nav.t.msg_undo }}</button></form></div>{% endif %}
+{% if total == 0 %}<p class="empty">{{ c.dups_none }}</p>{% endif %}
+<div class="panels">
+{% for b in books %}{% if !b.groups.is_empty() %}
+  {% if several %}<h2>{{ b.name }}{% if !b.own %} <span class="meta">· {{ nav.t.from_owner }} {{ b.owner }}</span>{% endif %}</h2>{% endif %}
+  {% for g in b.groups %}
+  <section class="panel dup-group">
+    <p class="dup-reasons">{% for r in g.reasons %}<span class="badge{% if !g.name_only %} warn{% endif %}">{{ r }}</span> {% endfor %}{% if g.name_only %}<span class="meta">{{ c.name_only }}</span>{% endif %}</p>
+    <ul class="rows contact-rows">
+      {% for r in g.rows %}<li><a class="contact-row" href="{{ r.href }}">{% let photo = r.photo.clone() %}{% let color = r.color %}{% let initials = r.initials.clone() %}{% let big = false %}{% include "_avatar.html" %}<span class="row-main"><span class="row-title">{{ r.display }}</span>{% if !r.sub.is_empty() %}<span class="meta contact-email">{{ r.sub }}</span>{% endif %}</span></a></li>{% endfor %}
+    </ul>
+    <div class="field-row">
+      {% if let Some(m) = g.merge %}<a class="button primary compact" href="{{ m }}">{{ c.review_merge }}</a>{% else %}<span class="hint">{{ c.too_many }}</span>{% endif %}
+      <form method="post" action="/contacts/duplicates/apart"><input type="hidden" name="book" value="{{ b.id }}">{% for n in g.names %}<input type="hidden" name="n" value="{{ n }}">{% endfor %}<button type="submit" class="compact quiet">{{ c.not_dups }}</button></form>
+    </div>
+  </section>
+  {% endfor %}
+{% endif %}{% endfor %}
+</div>
+{% endblock %}

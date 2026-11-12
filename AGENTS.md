@@ -148,7 +148,9 @@ pixels wide in English and Dutch. 2026-11-12, the owner's feedback on the
 calendar page: today readable, a Black theme, quick add in the new event's
 panel, the views as one menu (decision 55, migration 0012, prepared as
 0.9.0), checked in headless Chromium in dark, black and light at 1440 and
-360 pixels wide.
+360 pixels wide. Then contacts clean-up: filters, duplicates per address book,
+merge and bulk delete with one Undo (decision 56, migration 0013,
+prepared as 0.10.0).
 
 ## Architecture
 
@@ -1462,6 +1464,55 @@ Settled 2026-11-06:
     month and days on a phone.
     Prepared as 0.9.0 (migration 0012; the app keeps
     `czCoreRef=v0.7.0`).
+56. **Contacts clean-up on the web (2026-11-12, the owner's request):
+    filters, likely duplicates, merge and bulk delete.**
+    - **Filters:** Any / Has one / Missing for a first or last name,
+      phone, email, address, birthday, photo and organization, plus one
+      address book, combined with the search (`domain::contacts::Filter`,
+      in the query string so a view can be bookmarked; no JavaScript
+      needed). The filter box opens when a filter is set.
+    - **Duplicates, per address book only** (two people's books both
+      holding "Oma" is not a duplicate), in `calzone_core::dedupe`, pure
+      and shared with a future app screen: same phone (last nine digits,
+      so `+31 6 ...` meets `06-...`), same email (no case), same name (no
+      case, accents, punctuation or word order). A key on more than six
+      cards (`MAX_SHARED`) is a switchboard, a family line or a
+      placeholder an app filled in, and is ignored: in the household's
+      book one placeholder name sits on hundreds of saved email senders,
+      which chained into one huge group before this rule. No typo matching: it brings false
+      matches for little gain once phone and email match. Only books the
+      person can change are searched. Name-only groups are listed last
+      and say so.
+    - **Not duplicates:** pairs of object names in
+      `contact_not_duplicates` (migration 0013), per book and shared with
+      everyone who can change it, with an Undo. Pairs, not groups: a new
+      card that matches brings the group back with only that card new.
+    - **Merge** (2 to 10 cards, one book): the most complete card is kept
+      by default and can be switched; its UID stays, so phones update
+      that contact. Radios for name (as a whole), organization, job
+      title, birthday and photo; checkboxes for phones, emails,
+      addresses and groups (repeats removed by the same keys); notes
+      joined. `dedupe::merge` applies the picks through `card::apply`
+      (lossless as before), then copies every line the form doesn't
+      cover from the other cards when the kept card lacks it, labeled
+      groups (`itemN.URL` with its `X-ABLabel`) renumbered together;
+      single-valued ones (KIND, ANNIVERSARY, ...) only when the kept card
+      has none. Corpus test: every household duplicate group merged with
+      the defaults keeps the kept card's other lines byte for byte and
+      every phone, email and birthday.
+    - **Bulk delete, deliberately:** Select on the list turns rows into
+      checkboxes (only in books the person can change; Select all / none
+      with JavaScript). Delete opens a check page listing every contact;
+      nothing changes until a box ("Yes, delete these N contacts") is
+      ticked and the button pressed. At most 1000 at once.
+    - **One change, one Undo:** merges and bulk deletes go through
+      `events::write_set`: every collection locked in order, every card
+      still at the ETag the page saw or the whole set is refused, one
+      history `change_id` for all of them, so the existing Undo restores
+      every card (the kept one to its old text). Phones see the deletes
+      and the update through the change log as usual.
+    Prepared as 0.10.0 (migration 0013; the core gained
+    `unicode-normalization`, already in the lock file through sqlx).
 
 ## Roadmap
 

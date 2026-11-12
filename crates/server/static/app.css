@@ -442,6 +442,35 @@
   .contact-typed > input { flex: 1 1 auto; min-inline-size: 0; inline-size: auto; }
   .contact-address { display: grid; gap: var(--space-2xs); border: 0; border-block-end: var(--hairline); padding: 0 0 var(--space-xs); margin: 0; min-inline-size: 0; }
   .contact-address > select { justify-self: start; inline-size: auto; }
+  /* Clean-up (decision 56): filters, select mode, duplicates, merge. */
+  .contact-search { display: grid; gap: var(--space-2xs); }
+  .contact-filter > summary { list-style: none; }
+  .contact-filter > summary::-webkit-details-marker { display: none; }
+  .contact-filter[open] > summary { margin-block-end: var(--space-xs); }
+  .contact-filter { display: grid; gap: var(--space-xs); }
+  .filter-grid { display: grid; gap: var(--space-2xs) var(--space-s); grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr)); }
+  .filter-grid select { inline-size: 100%; }
+  .contact-count { margin: 0; }
+  .contact-row.picking { cursor: pointer; }
+  .contact-row.picking > input { flex: none; inline-size: 1.25rem; block-size: 1.25rem; accent-color: var(--accent); }
+  .contact-row.picking:has(> input:checked) .row-title { font-weight: 700; }
+  .pick-bar { position: sticky; inset-block-start: 0; z-index: 2; gap: var(--space-2xs); }
+  .pick-bar > .hint { margin: 0; }
+  .dup-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3xs) var(--space-2xs); margin: 0; }
+  .dup-group > .field-row form { display: contents; }
+  .pick-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2xs) var(--space-s); }
+  .pick-group { display: flex; align-items: center; gap: var(--space-2xs); }
+  .merge-cards > li { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-xs); }
+  .merge-cards > li > .contact-row { flex: 1 1 auto; min-inline-size: 0; }
+  .merge-cards > li > .row-actions { flex: none; }
+  .merge-cards .row-main { flex-basis: auto; }
+  .merge-cards > li.kept .row-title { font-weight: 700; }
+  .merge-choice { border: 0; padding: 0; margin: 0; min-inline-size: 0; display: grid; gap: 0; }
+  .merge-choice + .merge-choice { margin-block-start: var(--space-s); }
+  .merge-choice > legend { font-weight: 600; padding: 0; margin-block-end: var(--space-3xs); }
+  .merge-choice .checkbox { align-items: center; min-inline-size: 0; }
+  .merge-choice .row-main { min-inline-size: 0; }
+  .delete-list { max-block-size: 50vh; overflow-y: auto; }
   /* A notice with an Undo button beside it (decision 12). */
   .notice-undo { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); flex-wrap: wrap; }
 

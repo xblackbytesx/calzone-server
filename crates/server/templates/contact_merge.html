@@ -1,0 +1,62 @@
+{% extends "layout.html" %}
+{% block title %}{{ title }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ title }}</h1><p class="meta">{{ book_name }}</p></div>
+<div class="page-actions"><a class="button quiet" href="/contacts/duplicates">{{ c.cancel }}</a></div></header>
+{% if stale %}<div class="notice warn" role="status"><span>{{ c.merge_stale }}</span></div>{% endif %}
+<div class="panels">
+  <section class="panel">
+    <p class="hint">{{ c.merge_hint }}</p>
+    <ul class="rows merge-cards">
+      {% for k in cards %}<li{% if k.kept %} class="kept"{% endif %}><div class="contact-row">{% let photo = k.photo.clone() %}{% let color = k.color %}{% let initials = k.initials.clone() %}{% let big = false %}{% include "_avatar.html" %}<span class="row-main"><span class="row-title">{{ k.display }}</span>{% if !k.sub.is_empty() %}<span class="meta contact-email">{{ k.sub }}</span>{% endif %}</span></div>
+        <div class="row-actions">{% if k.kept %}<span class="badge ok">{{ c.kept }}</span>{% else %}<a class="button compact quiet" href="{{ k.keep_href }}">{{ c.keep_this }}</a>{% endif %}</div></li>{% endfor %}
+    </ul>
+  </section>
+  <form method="post" action="/contacts/merge" class="panels merge-form">
+    <input type="hidden" name="book" value="{{ book }}"><input type="hidden" name="keep" value="{{ keep }}">
+    {% for k in cards %}<input type="hidden" name="n" value="{{ k.name }}"><input type="hidden" name="e" value="{{ k.etag }}">{% endfor %}
+    <section class="panel">
+      <fieldset class="merge-choice"><legend>{{ c.name }}</legend>
+        {% for o in names %}<label class="checkbox"><input type="radio" name="name" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span class="row-main"><span>{{ o.label }}</span>{% if !o.meta.is_empty() %}<span class="meta">{{ o.meta }}</span>{% endif %}</span></label>{% endfor %}
+      </fieldset>
+      {% if !orgs.is_empty() %}<fieldset class="merge-choice"><legend>{{ nav.t.organization }}</legend>
+        {% for o in orgs %}<label class="checkbox"><input type="radio" name="org" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span class="row-main"><span>{{ o.label }}</span><span class="meta">{{ o.meta }}</span></span></label>{% endfor %}
+        <label class="checkbox"><input type="radio" name="org" value="none"> <span class="meta">{{ c.none }}</span></label>
+      </fieldset>{% endif %}
+      {% if !titles.is_empty() %}<fieldset class="merge-choice"><legend>{{ c.job_title }}</legend>
+        {% for o in titles %}<label class="checkbox"><input type="radio" name="title" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span class="row-main"><span>{{ o.label }}</span><span class="meta">{{ o.meta }}</span></span></label>{% endfor %}
+        <label class="checkbox"><input type="radio" name="title" value="none"> <span class="meta">{{ c.none }}</span></label>
+      </fieldset>{% endif %}
+      {% if !birthdays.is_empty() %}<fieldset class="merge-choice"><legend>{{ nav.t.birthday }}</legend>
+        {% for o in birthdays %}<label class="checkbox"><input type="radio" name="birthday" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span class="row-main"><span>{{ o.label }}</span><span class="meta">{{ o.meta }}</span></span></label>{% endfor %}
+        <label class="checkbox"><input type="radio" name="birthday" value="none"> <span class="meta">{{ c.none }}</span></label>
+      </fieldset>{% endif %}
+      {% if !photos.is_empty() %}<fieldset class="merge-choice"><legend>{{ c.f_photo }}</legend>
+        <div class="field-row">{% for o in photos %}<label class="checkbox"><input type="radio" name="photo" value="{{ o.value }}"{% if o.checked %} checked{% endif %}>{% if let Some(src) = o.src %}<img class="avatar big" src="{{ src }}" alt="" width="40" height="40">{% else %}<span class="meta">{{ c.f_photo }} {{ o.value }}</span>{% endif %}</label>{% endfor %}
+        <label class="checkbox"><input type="radio" name="photo" value="none"> <span class="meta">{{ c.none }}</span></label></div>
+      </fieldset>{% endif %}
+    </section>
+    {% if !phones.is_empty() || !emails.is_empty() || !addresses.is_empty() || !groups.is_empty() %}
+    <section class="panel">
+      {% if !phones.is_empty() %}<fieldset class="merge-choice"><legend>{{ nav.t.phones }}</legend>
+        {% for o in phones %}<label class="checkbox"><input type="checkbox" name="phone" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span class="row-main"><span>{{ o.label }}</span><span class="meta">{{ o.meta }}</span></span></label>{% endfor %}
+      </fieldset>{% endif %}
+      {% if !emails.is_empty() %}<fieldset class="merge-choice"><legend>{{ nav.t.emails }}</legend>
+        {% for o in emails %}<label class="checkbox"><input type="checkbox" name="email" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span class="row-main"><span class="contact-email">{{ o.label }}</span><span class="meta">{{ o.meta }}</span></span></label>{% endfor %}
+      </fieldset>{% endif %}
+      {% if !addresses.is_empty() %}<fieldset class="merge-choice"><legend>{{ nav.t.addresses }}</legend>
+        {% for o in addresses %}<label class="checkbox"><input type="checkbox" name="addr" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span class="row-main"><span>{{ o.label }}</span><span class="meta">{{ o.meta }}</span></span></label>{% endfor %}
+      </fieldset>{% endif %}
+      {% if !groups.is_empty() %}<fieldset class="merge-choice"><legend>{{ c.groups }}</legend>
+        {% for o in groups %}<label class="checkbox"><input type="checkbox" name="group" value="{{ o.value }}"{% if o.checked %} checked{% endif %}><span>{{ o.label }}</span></label>{% endfor %}
+      </fieldset>{% endif %}
+    </section>
+    {% endif %}
+    <section class="panel">
+      <label class="field"><span>{{ nav.t.notes }}</span><textarea name="note" rows="4">{{ note }}</textarea></label>
+      <p class="hint">{{ c.extras_hint }}</p>
+      <div class="field-row"><button type="submit" class="primary">{{ button }}</button><a class="button quiet" href="/contacts/duplicates">{{ c.cancel }}</a></div>
+    </section>
+  </form>
+</div>
+{% endblock %}

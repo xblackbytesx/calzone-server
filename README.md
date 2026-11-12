@@ -52,7 +52,9 @@ syncing as they always did. Built to replace Baikal.
 - **A calendar and contacts web app**: month and days, agenda, day, week
   and month views with drag to move and resize, quick add ("dentist thu
   3pm", also in Dutch), undo after every change, recurring edits for one,
-  following or all occurrences, and a contacts book with search. English
+  following or all occurrences, and a contacts book with search, filters
+  (everyone without a phone number, say), duplicate finding, merging and
+  bulk delete. English
   and Dutch; dark by default, with light and an OLED black theme; works
   on a phone.
 - **An Android app**: [CalZone for Android](https://github.com/xblackbytesx/calzone)

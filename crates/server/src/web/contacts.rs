@@ -5,7 +5,7 @@
 //! dialog (decision 12).
 
 use askama::Template;
-use axum::extract::{Path, Query, RawForm, State};
+use axum::extract::{Path, Query, RawForm, RawQuery, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG};
 use axum::http::{HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Redirect};
@@ -20,6 +20,7 @@ use super::{Nav, Page, WebError, html, i18n};
 use crate::AppState;
 use crate::domain::contacts::{self, ContactDetail};
 use crate::domain::{DomainError, events};
+use calzone_core::dedupe::Reason;
 
 /// Characters a path segment must not carry raw.
 const SEGMENT: &AsciiSet = &CONTROLS
@@ -59,6 +60,8 @@ fn letter(name: &str) -> String {
 
 pub struct RowView {
     pub href: String,
+    /// `collection/name`, for picking it.
+    pub pick: String,
     pub display: String,
     pub sub: String,
     pub initials: String,
@@ -75,13 +78,14 @@ pub struct BookView {
     pub name: String,
     pub owner: String,
     pub own: bool,
+    pub writable: bool,
     pub count: usize,
     pub groups: Vec<Group>,
 }
 
 /// A notice from the redirect after a write, with an Undo when it applies.
 pub struct Notice {
-    pub text: &'static str,
+    pub text: String,
     pub undo: Option<Uuid>,
     pub warn: bool,
 }
@@ -90,47 +94,132 @@ pub struct Notice {
 pub struct Flash {
     #[serde(default)]
     q: String,
+    book: Option<String>,
+    name: Option<String>,
+    phone: Option<String>,
+    email: Option<String>,
+    address: Option<String>,
+    birthday: Option<String>,
+    photo: Option<String>,
+    org: Option<String>,
+    select: Option<String>,
     saved: Option<Uuid>,
     added: Option<Uuid>,
     deleted: Option<Uuid>,
+    /// How many a bulk delete removed.
+    n: Option<usize>,
+    merged: Option<Uuid>,
     undone: Option<String>,
     stale: Option<String>,
 }
 
-fn notice(t: &'static i18n::T, f: &Flash) -> Option<Notice> {
+impl Flash {
+    fn filter(&self) -> contacts::Filter {
+        let w = |x: &Option<String>| contacts::Want::parse(x.as_deref().unwrap_or(""));
+        contacts::Filter {
+            q: self.q.clone(),
+            book: self.book.as_deref().and_then(|b| b.parse().ok()),
+            name: w(&self.name),
+            phone: w(&self.phone),
+            email: w(&self.email),
+            address: w(&self.address),
+            birthday: w(&self.birthday),
+            photo: w(&self.photo),
+            org: w(&self.org),
+        }
+    }
+}
+
+fn notice(t: &'static i18n::T, c: &'static i18n::C, f: &Flash) -> Option<Notice> {
+    if let (Some(id), Some(n)) = (f.deleted, f.n) {
+        let text = if n == 1 { c.deleted_one.to_string() } else { i18n::n(c.deleted_many, n) };
+        return Some(Notice { text, undo: Some(id), warn: false });
+    }
     if let Some(id) = f.deleted {
-        return Some(Notice { text: t.contact_deleted, undo: Some(id), warn: false });
+        return Some(Notice { text: t.contact_deleted.into(), undo: Some(id), warn: false });
+    }
+    if let Some(id) = f.merged {
+        return Some(Notice { text: c.merged.into(), undo: Some(id), warn: false });
     }
     if let Some(id) = f.saved {
-        return Some(Notice { text: t.contact_saved, undo: Some(id), warn: false });
+        return Some(Notice { text: t.contact_saved.into(), undo: Some(id), warn: false });
     }
     if let Some(id) = f.added {
-        return Some(Notice { text: t.contact_added, undo: Some(id), warn: false });
+        return Some(Notice { text: t.contact_added.into(), undo: Some(id), warn: false });
     }
     if f.undone.is_some() {
-        return Some(Notice { text: t.undone, undo: None, warn: false });
+        return Some(Notice { text: t.undone.into(), undo: None, warn: false });
     }
     if f.stale.is_some() {
-        return Some(Notice { text: t.stale_contact, undo: None, warn: true });
+        return Some(Notice { text: t.stale_contact.into(), undo: None, warn: true });
     }
     None
+}
+
+/// One has/lacks choice in the filter.
+pub struct FilterField {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub value: &'static str,
 }
 
 #[derive(Template)]
 #[template(path = "contacts.html")]
 struct ListPage {
     nav: Nav,
+    c: &'static i18n::C,
     q: String,
+    book: String,
+    book_choices: Vec<(Uuid, String)>,
+    fields: Vec<FilterField>,
+    /// Field filters (and a book) set: the filter box opens.
+    filtering: usize,
+    /// The filter as a query string, without `select`.
+    query: String,
+    /// The search alone (filters cleared).
+    clear_href: String,
+    select: bool,
     books: Vec<BookView>,
     total: usize,
+    shown: String,
+    duplicates: usize,
     can_add: bool,
+    can_pick: bool,
     notice: Option<Notice>,
+}
+
+fn filter_query(f: &contacts::Filter) -> String {
+    let mut parts: Vec<(&str, String)> = Vec::new();
+    if !f.q.trim().is_empty() {
+        parts.push(("q", f.q.clone()));
+    }
+    if let Some(b) = f.book {
+        parts.push(("book", b.to_string()));
+    }
+    for (k, w) in [
+        ("name", f.name),
+        ("phone", f.phone),
+        ("email", f.email),
+        ("address", f.address),
+        ("birthday", f.birthday),
+        ("photo", f.photo),
+        ("org", f.org),
+    ] {
+        if w != contacts::Want::Any {
+            parts.push((k, w.as_str().into()));
+        }
+    }
+    serde_urlencoded::to_string(&parts).unwrap_or_default()
 }
 
 pub async fn list(State(st): State<AppState>, user: WebUser, Query(f): Query<Flash>) -> Page {
     let t = i18n::t(user.lang);
-    let books = contacts::list(&st.pool, user.id(), &f.q).await?;
+    let c = i18n::c(user.lang);
+    let filter = f.filter();
+    let books = contacts::list(&st.pool, user.id(), &filter).await?;
     let can_add = books.iter().any(|b| b.writable);
+    let duplicates = books.iter().map(|b| b.duplicates).sum();
+    let select = f.select.is_some() && can_add;
     let mut total = 0;
     let views = books
         .into_iter()
@@ -146,6 +235,7 @@ pub async fn list(State(st): State<AppState>, user: WebUser, Query(f): Query<Fla
                     .unwrap_or_default();
                 let row = RowView {
                     href: href(r.collection, &r.name),
+                    pick: format!("{}/{}", r.collection, r.name),
                     initials: initials(&r.display),
                     color: color_for(&r.display),
                     photo: r
@@ -159,16 +249,46 @@ pub async fn list(State(st): State<AppState>, user: WebUser, Query(f): Query<Fla
                     _ => groups.push(Group { letter: l, rows: vec![row] }),
                 }
             }
-            BookView { name: b.name, owner: b.owner, own: b.own, count, groups }
+            BookView { name: b.name, owner: b.owner, own: b.own, writable: b.writable, count, groups }
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let can_pick = views.iter().any(|b| b.writable && b.count > 0);
+    let fields = vec![
+        FilterField { key: "name", label: c.f_name, value: filter.name.as_str() },
+        FilterField { key: "phone", label: c.f_phone, value: filter.phone.as_str() },
+        FilterField { key: "email", label: c.f_email, value: filter.email.as_str() },
+        FilterField { key: "address", label: c.f_address, value: filter.address.as_str() },
+        FilterField { key: "birthday", label: c.f_birthday, value: filter.birthday.as_str() },
+        FilterField { key: "photo", label: c.f_photo, value: filter.photo.as_str() },
+        FilterField { key: "org", label: c.f_org, value: filter.org.as_str() },
+    ];
     html(ListPage {
         nav: Nav::new(&st, &user, "contacts"),
+        c,
         q: f.q.clone(),
+        book: filter.book.map(|b| b.to_string()).unwrap_or_default(),
+        book_choices: contacts::books(&st.pool, user.id()).await?,
+        fields,
+        filtering: filter.fields_set() + usize::from(filter.book.is_some()),
+        query: filter_query(&filter),
+        clear_href: {
+            let mut parts: Vec<(&str, String)> = Vec::new();
+            if !f.q.trim().is_empty() {
+                parts.push(("q", f.q.clone()));
+            }
+            if select {
+                parts.push(("select", "1".into()));
+            }
+            format!("/contacts?{}", serde_urlencoded::to_string(&parts).unwrap_or_default())
+        },
+        select,
         books: views,
         total,
+        shown: i18n::n(c.shown, total),
+        duplicates,
         can_add,
-        notice: notice(t, &f),
+        can_pick,
+        notice: notice(t, c, &f),
     })
 }
 
@@ -305,7 +425,7 @@ pub async fn show(
         emails,
         addresses,
         birthday: d.card.birthday.map(|b| birthday_text(user.lang, b)),
-        notice: notice(t, &f),
+        notice: notice(t, i18n::c(user.lang), &f),
         d,
     })
 }
@@ -584,6 +704,476 @@ pub async fn undo(State(st): State<AppState>, user: WebUser, Path(change): Path<
     match events::undo(&st.pool, user.id(), change).await {
         Ok(()) => Ok(Redirect::to("/contacts?undone=1").into_response()),
         Err(DomainError::PreconditionFailed) => Err(WebError::bad(t.msg_cannot_undo)),
+        Err(e) => Err(e.into()),
+    }
+}
+
+// ---- Clean-up (decision 56): bulk delete, duplicates, merge ----
+
+fn form_pairs(body: &[u8], a: &'static i18n::A) -> Result<Vec<(String, String)>, WebError> {
+    serde_urlencoded::from_bytes(body).map_err(|_| WebError::bad(a.err_bad_form))
+}
+
+fn all_of(pairs: &[(String, String)], k: &str) -> Vec<String> {
+    pairs.iter().filter(|(n, _)| n == k).map(|(_, v)| v.clone()).collect()
+}
+
+fn one_of(pairs: &[(String, String)], k: &str) -> String {
+    pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap_or_default()
+}
+
+/// `collection/name` back into its parts.
+fn parse_pick(s: &str) -> Option<(Uuid, String)> {
+    let (c, n) = s.split_once('/')?;
+    Some((c.parse().ok()?, n.to_string())).filter(|(_, n)| !n.is_empty())
+}
+
+fn merge_href(book: Uuid, names: &[String]) -> String {
+    let mut parts: Vec<(&str, String)> = vec![("book", book.to_string())];
+    parts.extend(names.iter().map(|n| ("n", n.clone())));
+    format!("/contacts/merge?{}", serde_urlencoded::to_string(&parts).unwrap_or_default())
+}
+
+pub struct PickedView {
+    pub collection: Uuid,
+    pub name: String,
+    pub etag: String,
+    pub display: String,
+    pub book: String,
+}
+
+#[derive(Template)]
+#[template(path = "contacts_delete.html")]
+struct DeletePage {
+    nav: Nav,
+    c: &'static i18n::C,
+    title: String,
+    confirm: String,
+    button: String,
+    picked: Vec<PickedView>,
+    several_books: bool,
+}
+
+/// `POST /contacts/selected`: from select mode, to the delete check or the
+/// merge page. Nothing changes here.
+pub async fn selected(State(st): State<AppState>, user: WebUser, RawForm(body): RawForm) -> Page {
+    let c = i18n::c(user.lang);
+    let pairs = form_pairs(&body, i18n::a(user.lang))?;
+    let refs: Vec<(Uuid, String)> = all_of(&pairs, "pick").iter().filter_map(|p| parse_pick(p)).collect();
+    if refs.is_empty() {
+        return Err(WebError::bad(c.nothing_selected));
+    }
+    if one_of(&pairs, "action") == "merge" {
+        let book = refs[0].0;
+        let mut names: Vec<String> = Vec::new();
+        for (b, n) in &refs {
+            if *b != book {
+                return Err(WebError::bad(c.merge_needs));
+            }
+            if !names.contains(n) {
+                names.push(n.clone());
+            }
+        }
+        if !(2..=calzone_core::dedupe::MAX_MERGE).contains(&names.len()) {
+            return Err(WebError::bad(c.merge_needs));
+        }
+        return Ok(Redirect::to(&merge_href(book, &names)).into_response());
+    }
+    let picked = contacts::picked(&st.pool, user.id(), &refs).await?;
+    if picked.is_empty() {
+        return Err(WebError::bad(c.nothing_selected));
+    }
+    let n = picked.len();
+    let several_books = picked.iter().any(|p| p.book != picked[0].book);
+    html(DeletePage {
+        nav: Nav::new(&st, &user, "contacts"),
+        c,
+        title: if n == 1 { c.delete_title_one.into() } else { i18n::n(c.delete_title, n) },
+        confirm: if n == 1 { c.delete_confirm_one.into() } else { i18n::n(c.delete_confirm, n) },
+        button: if n == 1 { c.delete_button_one.into() } else { i18n::n(c.delete_button, n) },
+        picked: picked
+            .into_iter()
+            .map(|p| PickedView {
+                collection: p.collection,
+                name: p.name,
+                etag: p.etag,
+                display: p.display,
+                book: p.book,
+            })
+            .collect(),
+        several_books,
+    })
+}
+
+/// `POST /contacts/delete-many`: the checked list, under the ETags the
+/// check page showed, only with the box ticked. One change, one Undo.
+pub async fn delete_many(State(st): State<AppState>, user: WebUser, RawForm(body): RawForm) -> Page {
+    let c = i18n::c(user.lang);
+    let pairs = form_pairs(&body, i18n::a(user.lang))?;
+    if one_of(&pairs, "confirm") != "yes" {
+        return Err(WebError::bad(c.need_confirm));
+    }
+    let (cs, ns, es) = (all_of(&pairs, "c"), all_of(&pairs, "n"), all_of(&pairs, "e"));
+    if cs.is_empty() || cs.len() != ns.len() || cs.len() != es.len() {
+        return Err(WebError::bad(c.nothing_selected));
+    }
+    let mut targets = Vec::with_capacity(cs.len());
+    for ((col, name), etag) in cs.iter().zip(ns).zip(es) {
+        let collection: Uuid = col.parse().map_err(|_| WebError::bad(c.nothing_selected))?;
+        targets.push(contacts::Target { collection, name, etag });
+    }
+    match contacts::remove_many(&st.pool, user.id(), &targets).await {
+        Ok(id) => Ok(Redirect::to(&format!("/contacts?deleted={id}&n={}", targets.len())).into_response()),
+        Err(DomainError::PreconditionFailed | DomainError::NotFound) => Err(WebError::bad(c.changed_since)),
+        Err(e) => Err(e.into()),
+    }
+}
+
+pub struct DupGroupView {
+    pub rows: Vec<RowView>,
+    pub reasons: Vec<&'static str>,
+    pub name_only: bool,
+    pub merge: Option<String>,
+    pub names: Vec<String>,
+}
+
+pub struct DupBookView {
+    pub id: Uuid,
+    pub name: String,
+    pub owner: String,
+    pub own: bool,
+    pub groups: Vec<DupGroupView>,
+}
+
+/// The Undo after "Not duplicates".
+pub struct ApartNotice {
+    pub book: Uuid,
+    pub names: Vec<String>,
+}
+
+#[derive(Template)]
+#[template(path = "contacts_duplicates.html")]
+struct DupPage {
+    nav: Nav,
+    c: &'static i18n::C,
+    books: Vec<DupBookView>,
+    several: bool,
+    total: usize,
+    apart: Option<ApartNotice>,
+}
+
+/// `GET /contacts/duplicates`.
+pub async fn duplicates(State(st): State<AppState>, user: WebUser, RawQuery(q): RawQuery) -> Page {
+    let c = i18n::c(user.lang);
+    let pairs: Vec<(String, String)> = serde_urlencoded::from_str(q.as_deref().unwrap_or("")).unwrap_or_default();
+    let apart = one_of(&pairs, "apart")
+        .parse::<Uuid>()
+        .ok()
+        .map(|book| ApartNotice { book, names: all_of(&pairs, "n") })
+        .filter(|a| a.names.len() > 1);
+    let books = contacts::duplicates(&st.pool, user.id()).await?;
+    let several = books.len() > 1;
+    let mut total = 0;
+    let books = books
+        .into_iter()
+        .map(|b| {
+            total += b.groups.len();
+            let groups = b
+                .groups
+                .into_iter()
+                .map(|g| {
+                    let names: Vec<String> = g.cards.iter().map(|r| r.name.clone()).collect();
+                    let rows = g
+                        .cards
+                        .into_iter()
+                        .map(|r| {
+                            let sub = [r.phone.clone().unwrap_or_default(), r.email.clone().unwrap_or_default()]
+                                .into_iter()
+                                .filter(|s| !s.is_empty())
+                                .collect::<Vec<_>>()
+                                .join(" · ");
+                            RowView {
+                                href: href(r.collection, &r.name),
+                                pick: format!("{}/{}", r.collection, r.name),
+                                initials: initials(&r.display),
+                                color: color_for(&r.display),
+                                photo: r.has_photo.then(|| {
+                                    format!(
+                                        "/contacts/photo/{}/{}",
+                                        r.collection,
+                                        utf8_percent_encode(&r.name, SEGMENT)
+                                    )
+                                }),
+                                display: r.display,
+                                sub,
+                            }
+                        })
+                        .collect();
+                    let reasons = g
+                        .reasons
+                        .iter()
+                        .map(|r| match r {
+                            Reason::Phone => c.reason_phone,
+                            Reason::Email => c.reason_email,
+                            Reason::Name => c.reason_name,
+                        })
+                        .collect();
+                    DupGroupView {
+                        rows,
+                        reasons,
+                        name_only: g.reasons == [Reason::Name],
+                        merge: (names.len() <= calzone_core::dedupe::MAX_MERGE).then(|| merge_href(b.id, &names)),
+                        names,
+                    }
+                })
+                .collect();
+            DupBookView { id: b.id, name: b.name, owner: b.owner, own: b.own, groups }
+        })
+        .collect();
+    html(DupPage { nav: Nav::new(&st, &user, "contacts"), c, books, several, total, apart })
+}
+
+async fn set_apart(st: &AppState, user: &WebUser, body: &[u8], apart: bool) -> Result<(Uuid, Vec<String>), WebError> {
+    let pairs = form_pairs(body, i18n::a(user.lang))?;
+    let book: Uuid = one_of(&pairs, "book").parse().map_err(|_| WebError::bad(i18n::a(user.lang).err_bad_form))?;
+    let names = all_of(&pairs, "n");
+    contacts::set_apart(&st.pool, user.id(), book, &names, apart).await?;
+    Ok((book, names))
+}
+
+/// `POST /contacts/duplicates/apart`: "Not duplicates", with an Undo.
+pub async fn mark_apart(State(st): State<AppState>, user: WebUser, RawForm(body): RawForm) -> Page {
+    let (book, names) = set_apart(&st, &user, &body, true).await?;
+    let mut parts: Vec<(&str, String)> = vec![("apart", book.to_string())];
+    parts.extend(names.into_iter().map(|n| ("n", n)));
+    let q = serde_urlencoded::to_string(&parts).unwrap_or_default();
+    Ok(Redirect::to(&format!("/contacts/duplicates?{q}")).into_response())
+}
+
+/// `POST /contacts/duplicates/together`: that Undo.
+pub async fn unmark_apart(State(st): State<AppState>, user: WebUser, RawForm(body): RawForm) -> Page {
+    set_apart(&st, &user, &body, false).await?;
+    Ok(Redirect::to("/contacts/duplicates").into_response())
+}
+
+pub struct MergeCardView {
+    pub name: String,
+    pub etag: String,
+    pub display: String,
+    pub sub: String,
+    pub initials: String,
+    pub color: &'static str,
+    pub photo: Option<String>,
+    pub kept: bool,
+    pub keep_href: String,
+}
+
+/// A radio or checkbox on the merge page: its value, what it says, and
+/// where it comes from.
+pub struct Choice {
+    pub value: String,
+    pub label: String,
+    pub meta: String,
+    pub checked: bool,
+}
+
+pub struct PhotoChoice {
+    pub value: String,
+    pub src: Option<String>,
+    pub checked: bool,
+}
+
+#[derive(Template)]
+#[template(path = "contact_merge.html")]
+struct MergePage {
+    nav: Nav,
+    c: &'static i18n::C,
+    title: String,
+    button: String,
+    book: Uuid,
+    book_name: String,
+    keep: usize,
+    cards: Vec<MergeCardView>,
+    names: Vec<Choice>,
+    orgs: Vec<Choice>,
+    titles: Vec<Choice>,
+    birthdays: Vec<Choice>,
+    photos: Vec<PhotoChoice>,
+    phones: Vec<Choice>,
+    emails: Vec<Choice>,
+    addresses: Vec<Choice>,
+    groups: Vec<Choice>,
+    note: String,
+    stale: bool,
+}
+
+/// `GET /contacts/merge?book=..&n=..&n=..[&keep=i]`.
+pub async fn merge_form(State(st): State<AppState>, user: WebUser, RawQuery(q): RawQuery) -> Page {
+    let t = i18n::t(user.lang);
+    let c = i18n::c(user.lang);
+    let a = i18n::a(user.lang);
+    let pairs: Vec<(String, String)> = serde_urlencoded::from_str(q.as_deref().unwrap_or("")).unwrap_or_default();
+    let book: Uuid = one_of(&pairs, "book").parse().map_err(|_| WebError::bad(a.err_bad_form))?;
+    let set = match contacts::merge_set(&st.pool, user.id(), book, &all_of(&pairs, "n")).await {
+        Ok(s) => s,
+        Err(DomainError::Invalid(_)) => return Err(WebError::bad(c.merge_needs)),
+        Err(e) => return Err(e.into()),
+    };
+    let keep = one_of(&pairs, "keep")
+        .parse::<usize>()
+        .ok()
+        .filter(|k| *k < set.cards.len())
+        .unwrap_or_else(|| calzone_core::dedupe::keeper(&set.cards));
+    let p = calzone_core::dedupe::proposal(&set.cards, keep);
+    let picks = calzone_core::dedupe::Picks::all(&p);
+    let shown = |v: &card::CardView| {
+        if v.name.trim().is_empty() { v.org.clone() } else { v.name.clone() }
+    };
+    let from = |i: usize| c.from_card.replace("{name}", &shown(&set.cards[i]));
+    let photo_src = |i: usize| {
+        matches!(set.cards[i].photo, Some(card::Photo::Inline { .. }))
+            .then(|| format!("/contacts/photo/{book}/{}", utf8_percent_encode(&set.names[i], SEGMENT)))
+    };
+    let cards = set
+        .cards
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let d = shown(v);
+            let mut sub: Vec<String> = Vec::new();
+            sub.extend(v.phones.first().map(|p| p.value.clone()));
+            sub.extend(v.emails.first().map(|e| e.value.clone()));
+            let mut parts: Vec<(&str, String)> = vec![("book", book.to_string())];
+            parts.extend(set.names.iter().map(|n| ("n", n.clone())));
+            parts.push(("keep", i.to_string()));
+            MergeCardView {
+                name: set.names[i].clone(),
+                etag: set.etags[i].clone(),
+                initials: initials(&d),
+                color: color_for(&d),
+                photo: photo_src(i),
+                display: d,
+                sub: sub.join(" · "),
+                kept: i == keep,
+                keep_href: format!("/contacts/merge?{}", serde_urlencoded::to_string(&parts).unwrap_or_default()),
+            }
+        })
+        .collect();
+    let single = |list: Vec<(String, String)>, picked: Option<usize>| -> Vec<Choice> {
+        list.into_iter()
+            .enumerate()
+            .map(|(i, (label, meta))| Choice { value: i.to_string(), label, meta, checked: picked == Some(i) })
+            .collect()
+    };
+    let names = p
+        .names
+        .iter()
+        .map(|&i| {
+            let v = &set.cards[i];
+            let parts = [v.prefix.as_str(), &v.given, &v.middle, &v.family, &v.suffix]
+                .iter()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+            // The name parts, when they say more than the shown name.
+            let meta = if parts == shown(v) { String::new() } else { parts };
+            Choice { value: i.to_string(), label: shown(v), meta, checked: picks.name == i }
+        })
+        .collect();
+    let orgs = single(p.orgs.iter().map(|(i, v)| (v.clone(), from(*i))).collect(), picks.org);
+    let titles = single(p.titles.iter().map(|(i, v)| (v.clone(), from(*i))).collect(), picks.title);
+    let birthdays =
+        single(p.birthdays.iter().map(|(i, b)| (birthday_text(user.lang, *b), from(*i))).collect(), picks.birthday);
+    let photos = p
+        .photos
+        .iter()
+        .map(|&i| PhotoChoice { value: i.to_string(), src: photo_src(i), checked: picks.photo == Some(i) })
+        .collect();
+    let many = |list: Vec<(String, String)>| -> Vec<Choice> {
+        list.into_iter()
+            .enumerate()
+            .map(|(i, (label, meta))| Choice { value: i.to_string(), label, meta, checked: true })
+            .collect()
+    };
+    let typed_meta = |i: usize, x: &card::Typed| {
+        let kind = x.label.clone().unwrap_or_else(|| kind_word(t, x.kind).to_string());
+        format!("{kind} · {}", from(i))
+    };
+    let phones = many(p.phones.iter().map(|(i, x)| (x.value.clone(), typed_meta(*i, x))).collect());
+    let emails = many(p.emails.iter().map(|(i, x)| (x.value.clone(), typed_meta(*i, x))).collect());
+    let addresses = many(
+        p.addresses
+            .iter()
+            .map(|(i, a)| {
+                let kind = a.label.clone().unwrap_or_else(|| kind_word(t, a.kind.unwrap_or(Kind::Other)).to_string());
+                (a.one_line(), format!("{kind} · {}", from(*i)))
+            })
+            .collect(),
+    );
+    let groups = many(p.categories.iter().map(|g| (g.clone(), String::new())).collect());
+    let n = set.cards.len();
+    html(MergePage {
+        nav: Nav::new(&st, &user, "contacts"),
+        c,
+        title: i18n::n(c.merge_title, n),
+        button: i18n::n(c.merge_button, n),
+        book,
+        book_name: set.book,
+        keep,
+        cards,
+        names,
+        orgs,
+        titles,
+        birthdays,
+        photos,
+        phones,
+        emails,
+        addresses,
+        groups,
+        note: picks.note,
+        stale: one_of(&pairs, "stale") == "1",
+    })
+}
+
+/// `POST /contacts/merge`: one change, then the kept contact with Undo.
+pub async fn merge(State(st): State<AppState>, user: WebUser, RawForm(body): RawForm) -> Page {
+    let a = i18n::a(user.lang);
+    let c = i18n::c(user.lang);
+    let pairs = form_pairs(&body, a)?;
+    let book: Uuid = one_of(&pairs, "book").parse().map_err(|_| WebError::bad(a.err_bad_form))?;
+    let names = all_of(&pairs, "n");
+    let etags = all_of(&pairs, "e");
+    let keep: usize = one_of(&pairs, "keep").parse().map_err(|_| WebError::bad(a.err_bad_form))?;
+    let index = |k: &str| one_of(&pairs, k).parse::<usize>().ok();
+    let indices = |k: &str| all_of(&pairs, k).iter().filter_map(|v| v.parse::<usize>().ok()).collect::<Vec<_>>();
+    let picks = calzone_core::dedupe::Picks {
+        name: index("name").unwrap_or(keep),
+        org: index("org"),
+        title: index("title"),
+        birthday: index("birthday"),
+        photo: index("photo"),
+        phones: indices("phone"),
+        emails: indices("email"),
+        addresses: indices("addr"),
+        categories: indices("group"),
+        note: one_of(&pairs, "note"),
+    };
+    match contacts::merge(&st.pool, user.id(), book, &names, &etags, keep, &picks, now()).await {
+        Ok(id) => {
+            let kept = names.get(keep).cloned().unwrap_or_default();
+            Ok(Redirect::to(&format!("{}?merged={id}", href(book, &kept))).into_response())
+        }
+        Err(DomainError::PreconditionFailed | DomainError::NotFound) => {
+            let mut parts: Vec<(&str, String)> = vec![("book", book.to_string())];
+            parts.extend(names.iter().map(|n| ("n", n.clone())));
+            parts.push(("keep", keep.to_string()));
+            parts.push(("stale", "1".into()));
+            Ok(Redirect::to(&format!("/contacts/merge?{}", serde_urlencoded::to_string(&parts).unwrap_or_default()))
+                .into_response())
+        }
+        Err(DomainError::Invalid(m)) if m.contains("name") => Err(WebError::bad(i18n::t(user.lang).need_name)),
+        Err(DomainError::Invalid(_)) => Err(WebError::bad(c.merge_needs)),
         Err(e) => Err(e.into()),
     }
 }

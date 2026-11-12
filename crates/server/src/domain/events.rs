@@ -361,6 +361,77 @@ pub(crate) async fn write(
     Ok(Saved { change_id, name: name.to_string(), etag: etag_after, created })
 }
 
+/// One object in a [`write_set`]: where it is and the ETag the page saw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Target {
+    pub collection: Uuid,
+    pub name: String,
+    pub etag: String,
+}
+
+/// Change or delete several objects as one change (decision 56: a merge,
+/// a bulk delete): all or nothing, one history entry, so one Undo puts
+/// every object back. Each object must still have the ETag the page saw;
+/// anything newer refuses the whole set (`PreconditionFailed`). `apply`
+/// gets the texts in `targets` order and returns, for each, the new text
+/// or `None` to delete it.
+pub(crate) async fn write_set(
+    pool: &PgPool,
+    actor: Actor,
+    targets: &[Target],
+    apply: impl FnOnce(&[String]) -> Result<Vec<Option<String>>>,
+) -> Result<Uuid> {
+    let mut seen = std::collections::HashSet::new();
+    if targets.is_empty() || !targets.iter().all(|t| seen.insert((t.collection, t.name.as_str()))) {
+        return Err(DomainError::Invalid("each object once, at least one".into()));
+    }
+    let mut tx = pool.begin().await?;
+    // Lock every collection involved, in id order, so two sets never
+    // wait on each other.
+    let ids: std::collections::BTreeSet<Uuid> = targets.iter().map(|t| t.collection).collect();
+    let mut locks = BTreeMap::new();
+    for id in ids {
+        let l = lock(&mut tx, actor, id).await?;
+        if !l.access.can_write() {
+            return Err(DomainError::ReadOnly);
+        }
+        locks.insert(id, l);
+    }
+    let mut texts = Vec::with_capacity(targets.len());
+    for t in targets {
+        let (text, rev) = served_in(&mut tx, actor, t.collection, &t.name).await?;
+        if objects::etag(rev) != t.etag {
+            return Err(DomainError::PreconditionFailed);
+        }
+        texts.push(text);
+    }
+    let out = apply(&texts)?;
+    if out.len() != targets.len() {
+        return Err(DomainError::Invalid("one result per object".into()));
+    }
+    let change_id = Uuid::new_v4();
+    for ((t, new), old) in targets.iter().zip(out).zip(&texts) {
+        let locked = locks.get_mut(&t.collection).expect("locked above");
+        match new {
+            Some(new) if new == *old => {}
+            Some(new) => {
+                let prior = before(&mut tx, t.collection, &t.name).await?;
+                let p = prepare(locked.kind, &locked.components, &new)?;
+                let w = store(&mut tx, locked, actor, t.collection, &t.name, p, Precondition::IfMatch(t.etag.clone()))
+                    .await?;
+                record(&mut tx, change_id, actor, t.collection, &t.name, prior, Some(w.meta.revision)).await?;
+            }
+            None => {
+                let prior = before(&mut tx, t.collection, &t.name).await?;
+                delete_in(&mut tx, locked, t.collection, &t.name, Precondition::IfMatch(t.etag.clone())).await?;
+                record(&mut tx, change_id, actor, t.collection, &t.name, prior, None).await?;
+            }
+        }
+    }
+    tx.commit().await?;
+    Ok(change_id)
+}
+
 /// A split's new series keeps everyone else's series-wide reminders (the
 /// editor's own travel in the text). Reminders and snoozes for single
 /// occurrences stay with the old series, where those occurrences are.

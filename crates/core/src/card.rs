@@ -199,7 +199,7 @@ pub fn escape(s: &str) -> String {
     crate::edit::escape_text(s)
 }
 
-fn unescape(s: &str) -> String {
+pub(crate) fn unescape(s: &str) -> String {
     crate::object::unescape(s)
 }
 
@@ -393,7 +393,7 @@ pub struct CardChange {
     pub photo: Option<Option<Photo>>,
 }
 
-fn insert_at(c: &Component, name: &str) -> usize {
+pub(crate) fn insert_at(c: &Component, name: &str) -> usize {
     // After the last line of this name, else before the end.
     c.items
         .iter()
@@ -402,7 +402,7 @@ fn insert_at(c: &Component, name: &str) -> usize {
         .unwrap_or(c.items.len())
 }
 
-fn set_single(c: &mut Component, name: &str, line: Option<Line>) {
+pub(crate) fn set_single(c: &mut Component, name: &str, line: Option<Line>) {
     let at = c.items.iter().position(|i| matches!(i, Item::Property(l) if l.name() == name));
     match (at, line) {
         (Some(i), Some(l)) => c.items[i] = Item::Property(l),
@@ -428,7 +428,7 @@ fn set_all(c: &mut Component, name: &str, line: Option<Line>) {
 }
 
 /// The next free `itemN` group.
-fn next_group(c: &Component) -> u32 {
+pub(crate) fn next_group(c: &Component) -> u32 {
     c.properties()
         .filter_map(|l| l.group().map(str::to_ascii_lowercase))
         .filter_map(|g| g.strip_prefix("item").and_then(|n| n.parse::<u32>().ok()))
@@ -572,7 +572,7 @@ fn photo_line(p: &Photo, v4: bool) -> Line {
 }
 
 /// The same picture: inline data compared without whitespace.
-fn same_photo(a: Option<&Photo>, b: Option<&Photo>) -> bool {
+pub(crate) fn same_photo(a: Option<&Photo>, b: Option<&Photo>) -> bool {
     let squash = |s: &str| s.split_whitespace().collect::<String>();
     match (a, b) {
         (None, None) => true,
@@ -593,7 +593,7 @@ fn name_set(v: &[String]) -> Vec<String> {
     out
 }
 
-fn rev(now: NaiveDateTime) -> Line {
+pub(crate) fn rev(now: NaiveDateTime) -> Line {
     Line::new(format!("REV:{}Z", now.format("%Y%m%dT%H%M%S")))
 }
 

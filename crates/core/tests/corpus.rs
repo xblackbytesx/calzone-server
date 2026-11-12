@@ -903,3 +903,105 @@ fn private_calendar_through_the_screens() {
     );
     assert!(events > 0);
 }
+
+/// Decision 56: duplicates in the household address book, and every
+/// group merged with the page's defaults. The merged card reads, keeps the
+/// kept card's other lines byte for byte, holds every phone and email of
+/// every card, and every line the form doesn't cover. CONFIDENTIAL input:
+/// counts only.
+#[test]
+fn private_corpus_duplicates_merge_losslessly() {
+    use calzone_core::card;
+    use calzone_core::dedupe::{self, Picks, Reason};
+    use calzone_core::lines::Line;
+
+    let files = private_files("vcf");
+    if files.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.vcf");
+        return;
+    }
+    let now = dt("2026-11-12 09:00");
+    let edited =
+        ["FN", "N", "ORG", "TITLE", "TEL", "EMAIL", "ADR", "BDAY", "NOTE", "PHOTO", "CATEGORIES", "REV", "X-ABLABEL"];
+    for f in files {
+        let text = std::fs::read_to_string(&f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        let doc = Document::parse(&text).unwrap_or_else(|_| panic!("private vcf does not parse"));
+        let sources: Vec<String> = doc.components.iter().map(|c| c.to_string()).collect();
+        let views: Vec<card::CardView> = sources
+            .iter()
+            .enumerate()
+            .map(|(i, s)| card::read(s).unwrap_or_else(|e| panic!("card {i}: {e}")))
+            .collect();
+        let started = std::time::Instant::now();
+        let groups = dedupe::groups(&views, |_, _| false);
+        let took = started.elapsed();
+        let mut by_reason: BTreeMap<String, usize> = BTreeMap::new();
+        let mut sizes: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut carried = 0;
+        for (gi, g) in groups.iter().enumerate() {
+            for r in &g.reasons {
+                *by_reason.entry(format!("{r:?}")).or_default() += 1;
+            }
+            if g.reasons == vec![Reason::Name] {
+                *by_reason.entry("name only".into()).or_default() += 1;
+            }
+            *sizes.entry(g.members.len()).or_default() += 1;
+            let cards: Vec<card::CardView> = g.members.iter().map(|&i| views[i].clone()).collect();
+            let texts: Vec<&str> = g.members.iter().map(|&i| sources[i].as_str()).collect();
+            let keep = dedupe::keeper(&cards);
+            let p = dedupe::proposal(&cards, keep);
+            let change = dedupe::change(&cards, &p, &Picks::all(&p));
+            let others: Vec<&str> = texts.iter().enumerate().filter(|(i, _)| *i != keep).map(|(_, t)| *t).collect();
+            let out = dedupe::merge(texts[keep], &others, &change, now).unwrap_or_else(|e| panic!("group {gi}: {e}"));
+            let v = card::read(&out).unwrap_or_else(|e| panic!("group {gi}: merged card does not read: {e}"));
+            object::inspect_card(&Document::parse(&out).unwrap())
+                .unwrap_or_else(|_| panic!("group {gi}: not a valid card"));
+            assert_eq!(v.uid, cards[keep].uid, "group {gi}: the kept UID changed");
+            assert_eq!(missing_lines(texts[keep], &out, &edited), 0, "group {gi}: a kept line was lost");
+            let phones: Vec<String> =
+                v.phones.iter().map(|t| dedupe::phone_key(&t.value).unwrap_or(t.value.clone())).collect();
+            let emails: Vec<String> =
+                v.emails.iter().map(|t| dedupe::email_key(&t.value).unwrap_or(t.value.clone())).collect();
+            for (ci, c) in cards.iter().enumerate() {
+                for t in &c.phones {
+                    let k = dedupe::phone_key(&t.value).unwrap_or(t.value.clone());
+                    assert!(t.value.trim().is_empty() || phones.contains(&k), "group {gi} card {ci}: a phone was lost");
+                }
+                for t in &c.emails {
+                    let k = dedupe::email_key(&t.value).unwrap_or(t.value.clone());
+                    assert!(
+                        t.value.trim().is_empty() || emails.contains(&k),
+                        "group {gi} card {ci}: an email was lost"
+                    );
+                }
+                assert!(c.birthday.is_none() || v.birthday.is_some(), "group {gi}: a birthday was lost");
+            }
+            // Every other card's uncovered, ungrouped line is in the result.
+            let merged = Document::parse(&out).unwrap();
+            let mc = &merged.components[0];
+            for (ti, t) in others.iter().enumerate() {
+                let od = Document::parse(t).unwrap();
+                for l in od.components[0].properties().filter(|l| l.group().is_none()) {
+                    let n = l.name();
+                    if edited.contains(&n.as_str())
+                        || ["VERSION", "PRODID", "UID", "CLIENTPIDMAP", "X-ABUID", "SORT-STRING"].contains(&n.as_str())
+                        || ["KIND", "GENDER", "ANNIVERSARY", "X-ANNIVERSARY", "X-ABSHOWAS", "TZ", "GEO", "LANG"]
+                            .contains(&n.as_str())
+                    {
+                        continue;
+                    }
+                    let found = mc.properties().any(|m: &Line| {
+                        m.name() == n && dedupe::fold(m.value().trim()) == dedupe::fold(l.value().trim())
+                    });
+                    assert!(found, "group {gi} other {ti}: an uncovered line was lost");
+                    carried += 1;
+                }
+            }
+        }
+        eprintln!(
+            "household duplicates: {} cards, {} groups in {took:?}; reasons {by_reason:?}; sizes {sizes:?}; {carried} uncovered lines checked",
+            views.len(),
+            groups.len()
+        );
+    }
+}

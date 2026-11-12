@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block title %}{{ title }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ title }}</h1></div>
+<div class="page-actions"><a class="button quiet" href="/contacts?select=1">{{ c.cancel }}</a></div></header>
+<div class="panels">
+  <section class="panel">
+    <p>{{ c.delete_text }}</p>
+    <ul class="rows delete-list">
+      {% for p in picked %}<li><div class="row-main"><span class="row-title">{{ p.display }}</span>{% if several_books %}<span class="meta">{{ p.book }}</span>{% endif %}</div></li>{% endfor %}
+    </ul>
+  </section>
+  <form method="post" action="/contacts/delete-many" class="panel form">
+    {% for p in picked %}<input type="hidden" name="c" value="{{ p.collection }}"><input type="hidden" name="n" value="{{ p.name }}"><input type="hidden" name="e" value="{{ p.etag }}">{% endfor %}
+    <label class="checkbox"><input type="checkbox" name="confirm" value="yes" required> {{ confirm }}</label>
+    <div class="field-row"><button type="submit" class="danger">{{ button }}</button><a class="button quiet" href="/contacts?select=1">{{ c.cancel }}</a></div>
+  </form>
+</div>
+{% endblock %}
