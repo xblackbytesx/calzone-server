@@ -122,6 +122,12 @@ struct ShowPage {
     dav_url: Option<String>,
     grants: Vec<GrantRow>,
     candidates: Vec<Candidate>,
+    /// Birthdays is never shared (decision 57).
+    can_share: bool,
+    /// An address book's birthdays-only sharing (decision 57).
+    birthday_shares: Vec<Candidate>,
+    birthday_candidates: Vec<Candidate>,
+    b: &'static i18n::B,
 }
 
 fn label(a: &Account) -> String {
@@ -152,6 +158,24 @@ pub async fn show(State(st): State<AppState>, user: WebUser, headers: HeaderMap,
         (Vec::new(), Vec::new())
     };
     let calendar = c.kind == CollectionKind::Calendar;
+    let (birthday_shares, birthday_candidates) = if can_admin && !calendar {
+        let shared = crate::domain::birthdays::shares(&st.pool, user.id(), id).await?;
+        let everyone = accounts::list(&st.pool).await?;
+        let rows = shared
+            .iter()
+            .filter_map(|p| everyone.iter().find(|a| a.id == *p))
+            .map(|a| Candidate { id: a.id, label: label(a) })
+            .collect();
+        let granted: Vec<Uuid> = grants.iter().map(|g: &GrantRow| g.id).collect();
+        let cands = everyone
+            .iter()
+            .filter(|a| a.id != c.owner_id && !a.disabled && !shared.contains(&a.id) && !granted.contains(&a.id))
+            .map(|a| Candidate { id: a.id, label: label(a) })
+            .collect();
+        (rows, cands)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     let dav_url = st.dav.then(|| {
         let kind = if calendar { path::Kind::Calendar } else { path::Kind::AddressBook };
         format!("{}{}", base_url(&st, &headers), path::collection_href(kind, &c.owner_name, &c.slug))
@@ -167,6 +191,10 @@ pub async fn show(State(st): State<AppState>, user: WebUser, headers: HeaderMap,
         dav_url,
         grants,
         candidates,
+        can_share: can_admin && !c.birthdays,
+        birthday_shares,
+        birthday_candidates,
+        b: i18n::b(user.lang),
         c,
     })
 }

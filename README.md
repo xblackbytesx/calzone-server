@@ -54,7 +54,8 @@ syncing as they always did. Built to replace Baikal.
   3pm", also in Dutch), undo after every change, recurring edits for one,
   following or all occurrences, and a contacts book with search, filters
   (everyone without a phone number, say), duplicate finding, merging and
-  bulk delete. English
+  bulk delete. A Birthdays calendar made from your contacts, with ages,
+  and birthdays you can share without sharing the contacts. English
   and Dutch; dark by default, with light and an OLED black theme; works
   on a phone.
 - **An Android app**: [CalZone for Android](https://github.com/xblackbytesx/calzone)

@@ -471,6 +471,16 @@
   .merge-choice .checkbox { align-items: center; min-inline-size: 0; }
   .merge-choice .row-main { min-inline-size: 0; }
   .delete-list { max-block-size: 50vh; overflow-y: auto; }
+  /* Birthdays (decision 57): its settings and the clean-up list. */
+  .choice-list { border: 0; padding: 0; margin: 0; min-inline-size: 0; display: grid; gap: 0; }
+  .choice-list + .choice-list { margin-block-start: var(--space-s); }
+  .choice-list > legend { font-weight: 600; padding: 0; margin-block-end: var(--space-3xs); }
+  .choice-list .row-main, .birthday-list .row-main { min-inline-size: 0; }
+  .birthday-list > li { display: grid; gap: var(--space-3xs); }
+  .birthday-list > li > .hint, .birthday-copy { margin: 0; padding-inline-start: calc(1.25rem + var(--space-2xs)); }
+  .birthday-copy { display: grid; gap: var(--space-3xs); }
+  .birthday-copy .hint { margin: 0; }
+  .birthday-copy .field-row > input[type=date] { flex: 0 1 12rem; inline-size: auto; min-inline-size: 0; }
   /* A notice with an Undo button beside it (decision 12). */
   .notice-undo { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); flex-wrap: wrap; }
 

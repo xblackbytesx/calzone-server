@@ -16,6 +16,7 @@
       <button type="submit" class="primary">{{ nav.t.save }}</button>
     </form>
   </section>
+  {% if can_share %}
   <section class="panel">
     <h2>{{ nav.t.shared_with }}</h2>
     {% if grants.is_empty() %}<p class="empty">{{ nav.t.only_owner }}</p>{% else %}
@@ -38,6 +39,27 @@
       </div>
     </form>{% endif %}
   </section>
+  {% endif %}
+  {% if !calendar %}
+  <section class="panel">
+    <h2>{{ b.bshare_h }}</h2>
+    <p>{{ b.bshare_text }}</p>
+    {% if birthday_shares.is_empty() %}<p class="empty">{{ b.bshare_none }}</p>{% else %}
+    <ul class="rows">
+      {% for g in birthday_shares %}
+      <li><div class="row-main"><span class="row-title">{{ g.label }}</span></div>
+        <div class="row-actions"><form method="post" action="/collections/{{ c.id }}/birthdays/unshare/{{ g.id }}"><button type="submit" class="quiet compact">{{ nav.t.stop_sharing }}</button></form></div></li>
+      {% endfor %}
+    </ul>{% endif %}
+    {% if !birthday_candidates.is_empty() %}
+    <form method="post" action="/collections/{{ c.id }}/birthdays/share" class="form">
+      <div class="field-row">
+        <select name="principal" aria-label="{{ nav.t.person_or_group }}">{% for p in birthday_candidates %}<option value="{{ p.id }}">{{ p.label }}</option>{% endfor %}</select>
+        <button type="submit" class="primary">{{ b.bshare_button }}</button>
+      </div>
+    </form>{% endif %}
+  </section>
+  {% endif %}
   {% else %}
   <section class="panel">
     <h2>{{ nav.a.details }}</h2>

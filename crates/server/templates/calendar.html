@@ -37,6 +37,7 @@
       </ul>
       <a class="button quiet compact" href="/collections">+ {{ nav.t.new_calendar }}</a>
       <button type="button" class="quiet compact" data-cal="subscribe">+ {{ nav.t.subscribe }}</button>
+      {% if offer_birthdays %}<a class="button quiet compact" href="/birthdays">+ {{ b.add_birthdays }}</a>{% endif %}
     </aside>
     <div id="cal-main" class="cal-main">
       <div id="cal-mini" class="cal-mini" hidden></div>

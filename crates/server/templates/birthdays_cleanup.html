@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+{% block title %}{{ b.cleanup_h }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ b.cleanup_h }}</h1></div>
+<div class="page-actions"><a class="button quiet" href="/birthdays">{{ b.back }}</a></div></header>
+{% if let Some(text) = notice %}<div class="notice {% if warn %}warn{% else %}ok{% endif %} notice-undo" role="status"><span>{{ text }}</span>{% if let Some(id) = undo %}<form method="post" action="/birthdays/undo/{{ id }}"><button type="submit" class="compact">{{ nav.t.msg_undo }}</button></form>{% endif %}</div>{% endif %}
+<div class="panels">
+  {% if rows.is_empty() %}
+  <section class="panel"><p class="empty">{{ b.cl_none }}</p></section>
+  {% else %}
+  <form method="post" action="/birthdays/cleanup" class="panel form">
+    <p>{{ b.cl_intro }}</p>
+    <ul class="rows birthday-list">
+      {% for r in rows %}
+      <li>
+        {% if r.pick %}
+        <label class="checkbox"><input type="checkbox" name="pick" value="{{ r.key }}" checked><span class="row-main"><span class="row-title">{{ r.title }}</span><span class="meta">{{ r.when }} · {{ r.calendar }}{% if r.shared %} · {{ b.cl_shared }}{% endif %}</span></span></label>
+        <input type="hidden" name="etag:{{ r.key }}" value="{{ r.etag }}">
+        {% if let Some(c) = r.covered %}<p class="hint">{{ b.cl_covered }} {{ c }}</p>{% endif %}
+        {% if let Some(c) = r.copy %}
+        <input type="hidden" name="card:{{ r.key }}" value="{{ c.card }}"><input type="hidden" name="cardetag:{{ r.key }}" value="{{ c.etag }}">
+        <div class="birthday-copy">
+          <p class="hint">{{ c.contact }} {{ b.cl_copy }}</p>
+          <div class="field-row">
+            <input type="date" name="date:{{ r.key }}" value="{{ c.date }}" aria-label="{{ c.contact }}">
+            <label class="checkbox"><input type="checkbox" name="noyear:{{ r.key }}"> {{ b.cl_noyear }}</label>
+          </div>
+          <p class="hint">{{ b.cl_year_hint }}</p>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="row-main"><span class="row-title">{{ r.title }}</span><span class="meta">{{ r.when }} · {{ r.calendar }}</span></div>
+        {% if let Some((who, day)) = r.differs %}<p class="hint">{{ b.cl_differs }} {{ who }} {{ b.cl_differs_has }} ({{ day }}). {{ b.cl_differs_check }}</p>{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% if pickable > 0 %}
+    <label class="checkbox"><input type="checkbox" name="confirm" value="yes" required> {{ b.cl_confirm }}</label>
+    <div class="form-actions"><button type="submit" class="danger">{{ b.cl_button }}</button><a class="button quiet" href="/birthdays">{{ b.back }}</a></div>
+    {% endif %}
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

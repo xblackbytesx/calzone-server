@@ -108,7 +108,7 @@ pub async fn occurrences(
                     calendar: calendar.clone(),
                     owner: owner.clone(),
                     own: c.owner_id == actor,
-                    editable: c.access.can_write() && !c.subscribed,
+                    editable: c.access.can_write() && !c.filled(),
                 });
             }
         }
@@ -635,6 +635,9 @@ pub struct EventDetail {
     pub own: bool,
     pub editable: bool,
     pub color: String,
+    /// A Birthdays event's contact, when the viewer may open it:
+    /// `(address book, card name)` (decision 57).
+    pub contact: Option<(Uuid, String)>,
 }
 
 pub async fn detail(
@@ -676,7 +679,8 @@ pub async fn detail(
             .map(|a| a.label().to_string())
             .unwrap_or_else(|_| c.owner_name.clone()),
         own: c.owner_id == actor,
-        editable: c.access.can_write() && !c.subscribed,
+        editable: c.access.can_write() && !c.filled(),
         color: prefs.color.or(c.color).unwrap_or_else(|| DEFAULT_COLOR.into()),
+        contact: if c.birthdays { super::birthdays::contact_of(pool, actor, &served.body).await } else { None },
     })
 }

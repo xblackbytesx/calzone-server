@@ -61,7 +61,7 @@ pub async fn collections(pool: &PgPool, actor: Actor) -> Result<wire::Collection
                 color: c.color,
                 components: c.components,
                 access: wire_access(c.access),
-                read_only: c.subscribed || !c.access.can_write(),
+                read_only: c.subscribed || c.birthdays || !c.access.can_write(),
                 subscribed: c.subscribed,
                 state: State(c.sequence),
                 mine: wire::Mine {

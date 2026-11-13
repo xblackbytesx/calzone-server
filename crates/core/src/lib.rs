@@ -9,6 +9,7 @@
 //! - [`moment`], [`edit`]: times as properties write them; lossless event edits.
 //! - [`card`]: contacts read into their fields and edited losslessly.
 //! - [`dedupe`]: likely duplicate contacts, and several cards merged into one.
+//! - [`birthdays`]: the Birthdays calendar's events from contacts, and manual ones found.
 //! - [`quickadd`]: "dentist thu 3pm" / "tandarts do 15u" into a draft event.
 //! - [`feed`]: a calendar as a published `.ics`, full or busy-only.
 //! - [`import`]: `.ics`/`.vcf` files split into objects and assembled back.
@@ -18,6 +19,7 @@
 
 pub mod android;
 pub mod android_contacts;
+pub mod birthdays;
 pub mod card;
 pub mod dedupe;
 pub mod edit;

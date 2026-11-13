@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+{% block title %}{{ b.title }} · CalZone{% endblock %}
+{% block content %}
+<header class="page-header"><div><h1>{{ b.title }}</h1></div>
+<div class="page-actions"><a class="button quiet" href="/calendar">{{ b.open_calendar }}</a></div></header>
+{% if saved %}<div class="notice ok" role="status"><span>{{ b.saved }}</span></div>{% endif %}
+<div class="panels">
+  {% if !on %}
+  <section class="panel">
+    <p>{{ b.intro_off }}</p>
+    <form method="post" action="/birthdays/on"><button type="submit" class="primary">{{ b.turn_on }}</button></form>
+  </section>
+  {% else %}
+  <form method="post" action="/birthdays" class="panel form">
+    <p>{{ b.intro_on }}</p>
+    <fieldset class="choice-list">
+      <legend>{{ b.books_h }}</legend>
+      {% if books.is_empty() %}<p class="empty">{{ b.no_books }}</p>{% endif %}
+      {% for x in books %}<label class="checkbox"><input type="checkbox" name="book" value="{{ x.id }}"{% if x.included %} checked{% endif %}><span class="row-main"><span class="row-title">{{ x.name }}</span><span class="meta">{{ x.whose }}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    <fieldset class="choice-list">
+      <legend>{{ b.options_h }}</legend>
+      <label class="field">{{ b.reminder }} <span class="hint">{{ b.reminder_hint }}</span>
+        <select name="reminder">
+          <option value="none"{% if reminder == "none" %} selected{% endif %}>{{ b.rem_none }}</option>
+          {% for (v, label) in reminders %}<option value="{{ v }}"{% if reminder == *v %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></label>
+      <label class="checkbox"><input type="checkbox" name="anniversaries"{% if anniversaries %} checked{% endif %}> {{ b.anniversaries }}</label>
+    </fieldset>
+    <div class="form-actions"><button type="submit" class="primary">{{ nav.t.save }}</button></div>
+  </form>
+  <section class="panel">
+    <h2>{{ b.cleanup_h }}</h2>
+    <p>{{ manual_text }}</p>
+    {% if manual > 0 %}<a class="button" href="/birthdays/cleanup">{{ b.cleanup_link }}</a>{% endif %}
+  </section>
+  <section class="panel">
+    <h2>{{ b.share_h }}</h2>
+    <p>{{ b.share_text }}</p>
+    <a class="button quiet" href="/collections">{{ nav.t.nav_manage }}</a>
+  </section>
+  <form method="post" action="/birthdays/off" class="panel form">
+    <h2>{{ b.off_h }}</h2>
+    <p>{{ b.off_text }}</p>
+    <label class="checkbox"><input type="checkbox" name="confirm" value="yes" required> {{ b.off_confirm }}</label>
+    <div class="form-actions"><button type="submit" class="danger">{{ b.off_button }}</button></div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

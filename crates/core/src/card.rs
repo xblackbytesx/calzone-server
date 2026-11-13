@@ -291,7 +291,7 @@ fn categories_of(c: &Component) -> Vec<String> {
     out
 }
 
-fn birthday_of(v: &str) -> Option<Birthday> {
+pub(crate) fn birthday_of(v: &str) -> Option<Birthday> {
     let v = v.trim();
     let v = v.split('T').next().unwrap_or(v);
     if let Some(rest) = v.strip_prefix("--") {

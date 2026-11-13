@@ -8,13 +8,21 @@
     <label class="field">{{ t.my_name }} <span class="hint">{{ t.my_name_hint }}</span>
       <input type="text" name="display_name" value="{{ my_name }}" placeholder="{{ base_name }}" maxlength="100"></label>
     <label class="field">{{ t.my_color }} <input type="color" name="color" value="{{ color }}"></label>
+    {% if birthdays %}<input type="hidden" name="default_alarm" value="none">{% else %}
     <label class="field">{{ t.default_reminder }} <span class="hint">{{ t.default_reminder_hint }}</span>
       <select name="default_alarm">
         <option value="none"{% if alarm_value == "none" %} selected{% endif %}>{{ t.reminder_none }}</option>
         {% for (v, label) in alarms %}<option value="{{ v }}"{% if alarm_value == *v %} selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select></label>
+      </select></label>{% endif %}
     <div class="form-actions"><button type="submit" class="primary">{{ t.save }}</button></div>
   </form>
+  {% if birthdays %}
+  <section class="sheet-section">
+    <h3>{{ b.title }}</h3>
+    <p class="hint">{{ b.sheet_hint }}</p>
+    <a class="button quiet compact" href="/birthdays">{{ b.settings_link }}</a>
+  </section>
+  {% endif %}
   {% if let Some(s) = sub %}
   <section class="sheet-section" id="cal-sub" data-id="{{ id }}">
     <h3>{{ t.subscription_h }}</h3>

@@ -9,6 +9,7 @@
 pub mod access;
 pub mod accounts;
 pub mod app_passwords;
+pub mod birthdays;
 pub mod collections;
 pub mod contacts;
 pub mod devices;

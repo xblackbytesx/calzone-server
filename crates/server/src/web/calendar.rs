@@ -41,7 +41,7 @@ async fn writable(st: &AppState, user: &WebUser) -> Result<Vec<Cal>, WebError> {
     let mut out: Vec<(i32, bool, Cal)> = collections::visible(&st.pool, user.id(), CollectionKind::Calendar)
         .await?
         .into_iter()
-        .filter(|c| c.access.can_write() && !c.subscribed)
+        .filter(|c| c.access.can_write() && !c.filled())
         .filter_map(|c| {
             let pr = p.get(&c.id).cloned().unwrap_or_default();
             if pr.hidden {
@@ -124,6 +124,9 @@ struct CalendarPage {
     config: String,
     has_calendar: bool,
     list: Vec<ListRow>,
+    /// Birthdays is off: offer it under the list (decision 57).
+    offer_birthdays: bool,
+    b: &'static i18n::B,
 }
 
 pub async fn page(State(st): State<AppState>, user: WebUser) -> Page {
@@ -138,8 +141,11 @@ pub async fn page(State(st): State<AppState>, user: WebUser) -> Page {
     };
     let has_calendar = !config.calendars.is_empty();
     let list = list_rows(&st, &user).await?;
+    let offer_birthdays = crate::domain::birthdays::of(&st.pool, user.id()).await?.is_none();
     html(CalendarPage {
         list,
+        offer_birthdays,
+        b: i18n::b(user.lang),
         nav: Nav::new(&st, &user, "calendar"),
         strings: serde_json::to_string(i18n::t(user.lang)).expect("strings serialize"),
         config: serde_json::to_string(&config).expect("config serializes"),
@@ -177,6 +183,9 @@ struct PanelPage {
     alarm_value: String,
     /// `never`, `until` or `count`.
     repeat_end: &'static str,
+    /// A Birthdays event's contact page.
+    contact_href: Option<String>,
+    b: &'static i18n::B,
 }
 
 fn repeat_end(d: &EventDetail) -> &'static str {
@@ -222,7 +231,19 @@ fn panel(user: &WebUser, new: bool, d: EventDetail, calendars: Vec<Cal>) -> Page
     };
     let initial = serde_json::to_string(&initial).expect("serializes");
     let end = repeat_end(&d);
-    html(PanelPage { t, new, d, initial, calendars, alarms: alarm_options(t), alarm_value: alarm, repeat_end: end })
+    let contact_href = d.contact.as_ref().map(|(c, n)| super::contacts::href(*c, n));
+    html(PanelPage {
+        t,
+        new,
+        d,
+        initial,
+        calendars,
+        alarms: alarm_options(t),
+        alarm_value: alarm,
+        repeat_end: end,
+        contact_href,
+        b: i18n::b(user.lang),
+    })
 }
 
 #[derive(Deserialize)]
@@ -323,6 +344,7 @@ pub async fn new_event(State(st): State<AppState>, user: WebUser, Query(q): Quer
         own: true,
         editable: true,
         color: first.color.clone(),
+        contact: None,
     };
     panel(&user, true, d, calendars)
 }
@@ -362,6 +384,9 @@ struct SettingsSheet {
     /// Secret links, for a calendar the person may share (not a subscribed one).
     links: Vec<LinkView>,
     sub: Option<SubView>,
+    /// The person's Birthdays: personal, set up on its own page.
+    birthdays: bool,
+    b: &'static i18n::B,
 }
 
 struct LinkView {
@@ -413,7 +438,8 @@ pub async fn settings_sheet(
             format!("{} ({})", a.label(), a.name)
         }
     };
-    let can_admin = c.access.can_admin();
+    // Birthdays is never shared and has no links (decision 57).
+    let can_admin = c.access.can_admin() && !c.birthdays;
     let (grants, candidates) = if can_admin {
         let g = collections::grants(&st.pool, user.id(), id).await?;
         let rows = g
@@ -485,5 +511,7 @@ pub async fn settings_sheet(
         candidates,
         links,
         sub,
+        birthdays: c.birthdays,
+        b: i18n::b(user.lang),
     })
 }

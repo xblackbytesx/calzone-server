@@ -81,24 +81,27 @@ pub(super) struct Locked {
 /// number inside the lock.
 pub(super) async fn lock(tx: &mut Transaction<'_, Postgres>, actor: Actor, collection: Uuid) -> Result<Locked> {
     let row: Option<(String, Vec<String>, i64, bool)> = sqlx::query_as(
-        "SELECT kind, components, sequence, EXISTS (SELECT 1 FROM subscriptions s WHERE s.collection_id = c.id)
+        "SELECT kind, components, sequence,
+                EXISTS (SELECT 1 FROM subscriptions s WHERE s.collection_id = c.id)
+                OR EXISTS (SELECT 1 FROM birthday_calendars b WHERE b.collection_id = c.id)
          FROM collections c WHERE id = $1 FOR UPDATE",
     )
     .bind(collection)
     .fetch_optional(&mut **tx)
     .await?;
-    let (kind, components, sequence, subscribed) = row.ok_or(DomainError::NotFound)?;
+    let (kind, components, sequence, filled) = row.ok_or(DomainError::NotFound)?;
     let mut access = access::of(&mut **tx, actor, collection).await?.ok_or(DomainError::NotFound)?;
-    if subscribed {
-        // Filled from outside: nobody edits it (their own reminders aside,
-        // which only need read access).
+    if filled {
+        // Filled by the server (a subscription, Birthdays): nobody edits it
+        // (their own reminders aside, which only need read access).
         access = Access::Read;
     }
     let kind = if kind == "addressbook" { CollectionKind::AddressBook } else { CollectionKind::Calendar };
     Ok(Locked { kind, components, sequence, access })
 }
 
-/// The refresher's lock on a subscribed calendar: no actor, full access.
+/// The refresher's lock on a calendar the server fills (a subscription,
+/// Birthdays): no actor, full access.
 pub(super) async fn lock_for_refresh(tx: &mut Transaction<'_, Postgres>, collection: Uuid) -> Result<Locked> {
     let row: Option<(String, Vec<String>, i64)> =
         sqlx::query_as("SELECT kind, components, sequence FROM collections WHERE id = $1 FOR UPDATE")

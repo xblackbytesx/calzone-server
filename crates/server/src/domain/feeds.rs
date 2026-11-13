@@ -36,7 +36,8 @@ async fn admin_calendar(pool: &PgPool, actor: Actor, collection: Uuid) -> Result
     if c.kind != CollectionKind::Calendar {
         return Err(DomainError::NotFound);
     }
-    if !c.access.can_admin() {
+    if !c.access.can_admin() || c.birthdays {
+        // Birthdays holds what others shared with this person only.
         return Err(DomainError::ReadOnly);
     }
     Ok(c)

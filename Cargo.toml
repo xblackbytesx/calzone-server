@@ -11,7 +11,7 @@ resolver = "3"
 members = ["crates/core", "crates/dav", "crates/server", "crates/client", "crates/ffi"]
 
 [workspace.package]
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.92"
 license = "GPL-3.0-or-later"

@@ -5,7 +5,7 @@
 //! time; each event keeps its own kind (floating stays floating, a zoned
 //! event keeps its zone), as decision 37 settled for the web.
 
-use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
 
 use crate::edit::{self, EventChange};
@@ -450,13 +450,12 @@ pub struct Occurrence {
 /// viewer's zone. Not an event (a task, a journal): none.
 pub fn occurrences(text: &str, from: NaiveDateTime, to: NaiveDateTime, viewer: chrono_tz::Tz) -> Vec<Occurrence> {
     let Ok(exp) = recur::expand(text, from, to, viewer) else { return Vec::new() };
-    let is_event = Document::parse(text)
-        .ok()
-        .and_then(|d| d.components.first().map(|c| c.components().any(|x| x.name == "VEVENT")))
-        .unwrap_or(false);
-    if !is_event {
-        return Vec::new();
-    }
+    let doc = Document::parse(text).ok();
+    let first =
+        doc.as_ref().and_then(|d| d.components.first().and_then(|c| c.components().find(|x| x.name == "VEVENT")));
+    let Some(first) = first else { return Vec::new() };
+    // A birthday or anniversary (decision 57): the age, per year shown.
+    let since: Option<i32> = first.property(crate::birthdays::SINCE).and_then(|l| l.value().trim().parse().ok());
     exp.occurrences
         .into_iter()
         .map(|o| {
@@ -464,7 +463,17 @@ pub fn occurrences(text: &str, from: NaiveDateTime, to: NaiveDateTime, viewer: c
             Occurrence {
                 recurring: instance.is_some(),
                 instance,
-                title: o.summary.clone().unwrap_or_default(),
+                title: {
+                    let t = o.summary.clone().unwrap_or_default();
+                    let year = match &o.start {
+                        When::Date(d) => d.year(),
+                        w => w.instant(viewer).year(),
+                    };
+                    match crate::birthdays::age(since, year) {
+                        Some(a) => format!("{t} ({a})"),
+                        None => t,
+                    }
+                },
                 location: o.location.clone(),
                 start: local_text(&o.start, viewer),
                 end: local_text(&o.end, viewer),

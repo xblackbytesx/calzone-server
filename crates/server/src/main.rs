@@ -46,6 +46,7 @@ async fn main() -> Result<()> {
             }
             tracing::info!(dav = state.dav, "CalDAV/CardDAV door {}", if state.dav { "on" } else { "off" });
             calzone_server::feeds::spawn_refresher(state.pool.clone(), state.feeds_allow_private);
+            calzone_server::domain::birthdays::spawn(state.pool.clone());
             if state.push.on() {
                 calzone_server::push::start(state.pool.clone(), state.push.clone()).await?;
                 tracing::info!(hosts = %state.push.hosts.join(", "), "push on");

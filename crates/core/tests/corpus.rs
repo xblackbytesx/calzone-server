@@ -1005,3 +1005,65 @@ fn private_corpus_duplicates_merge_losslessly() {
         );
     }
 }
+
+/// Decision 57: the household's birthdays as the Birthdays calendar makes
+/// them. Every card with a birthday gives an event that the store accepts
+/// and that shows once in 2026, and every manual yearly event in the
+/// calendar export is recognized and matched to its contact. CONFIDENTIAL
+/// input: counts only.
+#[test]
+fn private_corpus_birthdays() {
+    use calzone_core::birthdays;
+
+    let (cards, cals) = (private_files("vcf"), private_files("ics"));
+    if cards.is_empty() {
+        eprintln!("SKIP: no fixtures/private/*.vcf");
+        return;
+    }
+    let mut people = Vec::new();
+    let mut with_birthday = 0;
+    for f in &cards {
+        let text = std::fs::read_to_string(f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        let doc = Document::parse(&text).unwrap_or_else(|_| panic!("private vcf does not parse"));
+        for (i, c) in doc.components.iter().enumerate() {
+            if let Some(p) = birthdays::person(&c.to_string(), 0, format!("book/{i}")) {
+                with_birthday += usize::from(p.birthday.is_some());
+                people.push(p);
+            }
+        }
+    }
+    let entries = birthdays::entries(&people, true);
+    let from = dt("2026-01-01 00:00");
+    let to = dt("2027-01-01 00:00");
+    let mut with_age = 0;
+    for (i, e) in entries.iter().enumerate() {
+        let text = birthdays::event(e, &e.name, Some("book/x.vcf"));
+        let doc = Document::parse(&text).unwrap_or_else(|_| panic!("entry {i}: does not parse"));
+        object::inspect_calendar(&doc, &text).unwrap_or_else(|_| panic!("entry {i}: not a valid event"));
+        let shown = calzone_core::view::occurrences(&text, from, to, chrono_tz::Europe::Amsterdam);
+        assert_eq!(shown.len(), 1, "entry {i}: not once in 2026");
+        with_age += usize::from(shown[0].title.ends_with(')'));
+    }
+    let birthday_events = entries.iter().filter(|e| e.occasion == birthdays::Occasion::Birthday).count();
+    let mut manual = 0;
+    let mut matched = 0;
+    for f in &cals {
+        let text = std::fs::read_to_string(f).unwrap_or_else(|_| panic!("private file is not UTF-8"));
+        for o in objects_from_export(&text) {
+            let Some(m) = birthdays::manual(&o) else { continue };
+            manual += 1;
+            let hit = entries.iter().any(|e| {
+                use chrono::Datelike;
+                e.day.month == m.start.month()
+                    && e.day.day == m.start.day()
+                    && e.cards.iter().any(|&c| birthdays::names(&m.title, &people[c].view))
+            });
+            matched += usize::from(hit);
+        }
+    }
+    assert_eq!(matched, manual, "a manual yearly event did not match its contact");
+    eprintln!(
+        "household birthdays: {with_birthday} cards with a birthday, {birthday_events} birthday events ({} in all, {with_age} with an age); {manual} manual yearly events, {matched} matched",
+        entries.len()
+    );
+}

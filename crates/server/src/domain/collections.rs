@@ -42,6 +42,9 @@ pub struct Collection {
     /// Filled from an outside `.ics` (decision 24): read-only for everyone,
     /// whatever their access.
     pub subscribed: bool,
+    /// A person's Birthdays calendar (decision 57): filled by the server
+    /// from contacts, read-only for everyone, never shared.
+    pub birthdays: bool,
     /// The asking actor's access.
     pub access: Access,
 }
@@ -56,9 +59,10 @@ pub struct NewCollection<'a> {
     pub components: &'a [&'a str],
 }
 
-type Row = (Uuid, Uuid, String, String, String, String, String, Option<String>, Vec<String>, i64, bool, Option<i32>);
+type Row =
+    (Uuid, Uuid, String, String, String, String, String, Option<String>, Vec<String>, i64, bool, bool, Option<i32>);
 
-const COLUMNS: &str = "c.id, c.owner_id, o.name, c.kind, c.slug, c.display_name, c.description, c.color, c.components, c.sequence, EXISTS (SELECT 1 FROM subscriptions s WHERE s.collection_id = c.id)";
+const COLUMNS: &str = "c.id, c.owner_id, o.name, c.kind, c.slug, c.display_name, c.description, c.color, c.components, c.sequence, EXISTS (SELECT 1 FROM subscriptions s WHERE s.collection_id = c.id), EXISTS (SELECT 1 FROM birthday_calendars b WHERE b.collection_id = c.id)";
 
 fn from_row(r: Row) -> Option<Collection> {
     Some(Collection {
@@ -73,8 +77,17 @@ fn from_row(r: Row) -> Option<Collection> {
         components: r.8,
         sequence: r.9,
         subscribed: r.10,
-        access: access::from_number(r.11)?,
+        birthdays: r.11,
+        access: access::from_number(r.12)?,
     })
+}
+
+impl Collection {
+    /// Filled by the server (a subscription or Birthdays): nobody edits
+    /// its events, whatever their access; their own reminders aside.
+    pub fn filled(&self) -> bool {
+        self.subscribed || self.birthdays
+    }
 }
 
 /// Create a collection owned by the actor.
@@ -297,6 +310,10 @@ pub async fn set_grant(pool: &PgPool, actor: Actor, id: Uuid, principal: Uuid, l
     }
     if principal == c.owner_id {
         return Err(DomainError::Invalid("the owner always has full access".into()));
+    }
+    if c.birthdays && level.is_some() {
+        // It holds names and dates others shared with this person only.
+        return Err(DomainError::Invalid("the Birthdays calendar is personal".into()));
     }
     match level {
         None => {

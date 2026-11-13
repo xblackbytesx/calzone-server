@@ -150,7 +150,10 @@ panel, the views as one menu (decision 55, migration 0012, prepared as
 0.9.0), checked in headless Chromium in dark, black and light at 1440 and
 360 pixels wide. Then contacts clean-up: filters, duplicates per address book,
 merge and bulk delete with one Undo (decision 56, migration 0013,
-prepared as 0.10.0).
+prepared as 0.10.0). 2026-11-13: a Birthdays calendar from contacts,
+birthdays-only sharing between people, and the manual birthday events
+removed with one Undo (decision 57, migration 0014, prepared as 0.11.0),
+pulled forward from phase 5 at the owner's request.
 
 ## Architecture
 
@@ -1514,6 +1517,68 @@ Settled 2026-11-06:
     Prepared as 0.10.0 (migration 0013; the core gained
     `unicode-normalization`, already in the lock file through sqlx).
 
+57. **Birthdays from contacts (2026-11-13, the owner's request; pulled
+    forward from phase 5).** The household kept birthdays as manual
+    yearly events, and the two partners keep separate address books
+    that overlap.
+    - **One Birthdays calendar per person, personal.** Not a shared,
+      deduplicated household calendar: that needs an owner and copies
+      that go stale. Each person turns theirs on (`/birthdays`, or "+
+      Birthdays from contacts" under the calendar list) and picks which
+      address books feed it.
+    - **Stored, filled by the server, read-only** like a subscription
+      (`birthday_calendars`, migration 0014): `objects::lock` downgrades
+      everyone to read, `Collection::filled()` covers both kinds for the
+      pages, the sync API (`read_only`) and the DAV door (read
+      privileges, PUT refused). Stored, not computed per request, so the
+      phone, push and the DAV door serve it with no new code; the phone
+      could not compute it anyway, as it never has the partner's cards.
+      Never shared: `set_grant` and feed links refuse it.
+    - **Rebuilt when a source changes:** `birthdays::rebuild` records
+      what it was built from (each source book's sequence, own or not,
+      the language, anniversaries) and does nothing when that is the
+      same; otherwise it writes only events whose text changed and
+      deletes the gone ones, under UIDs from a hash of the shown card, so
+      phones download little and nobody's layer is touched. A task checks
+      every 10 seconds; settings and the clean-up rebuild at once.
+    - **Birthdays-only sharing** (`birthday_shares`): whoever may share an
+      address book can give a person or group its names and dates for
+      their Birthdays, from the address book's page. No access check reads
+      that table, so it opens nothing else: no card, no contact link, no
+      `/contacts` row (tested). The partners do not share their books.
+    - **The same person once** (`calzone_core::birthdays`): same occasion,
+      same day, years that don't disagree, and the same name (folded as in
+      decision 56), phone or email. The date makes this far safer than
+      contact duplicates, and the phone rule matches "Oma" with her full
+      name. Different years stay two events: one card is wrong. The card
+      shown is the person's own first, then shared books, then
+      birthdays-only.
+    - **The event:** yearly, all day, transparent, the name as title
+      (anniversaries "<name>, wedding anniversary" / "trouwdag", off by
+      default). The 29th of February uses `BYMONTHDAY=-1`, so it falls on
+      the 28th in other years. A year before 1800 (Apple's 1604) means no
+      year. The age is not in the stored title (it changes yearly):
+      `X-CALZONE-SINCE` holds the year and `view::occurrences` adds
+      "(41)" per year shown, for the web and the app alike; other apps see
+      the name. `X-CALZONE-CONTACT` names the card only when its owner may
+      read it, and the event panel shows "Open contact".
+    - **Reminders:** one setting (none, 9:00 on the day, the day before, a
+      week before), put in the person's own layer on every event and on
+      new ones; changing it rewrites every event's layer.
+    - **The manual events:** `/birthdays/cleanup` lists yearly all-day
+      events in calendars the person may edit whose title names a
+      contact: covered (the same day on the card), copy (the contact has
+      no birthday: the date, year from the event's start, editable or
+      "year unknown", goes onto the card first), or differs (left alone,
+      with both dates). Removal needs a ticked box and goes through
+      `events::write_set`: every event and card at the ETag the page saw,
+      one change, one Undo. Household corpus, counts only: 60 cards with
+      a birthday give 60 events; all 34 manual yearly events match their
+      contact on the same day and year.
+    - **Not done:** reminders other than the four; the age in other apps'
+      titles (they show the name).
+    Prepared as 0.11.0 (migration 0014).
+
 ## Roadmap
 
 Order (settled 2026-11-07): 1, 2, 4a (with moving in off Baikal onto
@@ -1530,7 +1595,7 @@ own screens are built on it. Phase numbers stay as they are.
 | 3 | MCP door, assistant accounts, MCP access per collection | external caldav-mcp | Hermes reads and writes within what it was given only |
 | 4a | merge in the core, sync API, push, `crates/client` + `crates/ffi`, Android store + system bridge | DAVx5 | Fossify and the phone's contacts run on CalZone's bridge with DAVx5 uninstalled, for a few weeks |
 | 4b | Android calendar UI, the app's own reminders, widgets | Fossify | the household test (decision 12) on the app, then daily use for a few weeks |
-| 5 | invitations, free/busy, birthdays calendar from contacts | | |
+| 5 | invitations, free/busy (the birthdays calendar was built early: decision 57) | | |
 
 ## Invariants
 
@@ -1551,6 +1616,10 @@ own screens are built on it. Phase numbers stay as they are.
   one calendar at its detail level, and a revoked or unknown token is `404`.
 - **Subscribed feeds keep the last good copy:** a failed, partial or empty
   refresh never replaces stored events.
+- **Birthdays-only sharing opens nothing else:** `birthday_shares` is read
+  by the Birthdays rebuild only, never by an access check; a Birthdays
+  calendar is never shared and names a card only to someone who may read
+  it.
 - **Conditional writes are honored:** `If-Match` / `If-None-Match` are
   checked under a row lock; a stale write is refused, never merged silently
   by the DAV door.

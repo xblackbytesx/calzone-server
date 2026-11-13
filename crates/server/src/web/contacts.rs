@@ -36,7 +36,7 @@ const SEGMENT: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-fn href(collection: Uuid, name: &str) -> String {
+pub(crate) fn href(collection: Uuid, name: &str) -> String {
     format!("/contacts/{collection}/{}", utf8_percent_encode(name, SEGMENT))
 }
 

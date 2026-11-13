@@ -9,6 +9,7 @@
 
 mod admin;
 mod api;
+mod birthdays;
 mod calendar;
 mod collections;
 mod contacts;
@@ -91,6 +92,13 @@ pub fn routes(state: &AppState) -> Router<AppState> {
         .route("/calendar/event", get(calendar::event))
         .route("/calendar/event/new", get(calendar::new_event))
         .route("/calendar/settings/{id}", get(calendar::settings_sheet))
+        .route("/birthdays", get(birthdays::page).post(birthdays::save))
+        .route("/birthdays/on", post(birthdays::turn_on))
+        .route("/birthdays/off", post(birthdays::turn_off))
+        .route("/birthdays/cleanup", get(birthdays::cleanup).post(birthdays::remove))
+        .route("/birthdays/undo/{change}", post(birthdays::undo))
+        .route("/collections/{id}/birthdays/share", post(birthdays::share))
+        .route("/collections/{id}/birthdays/unshare/{principal}", post(birthdays::unshare))
         .route("/static/event-calendar.min.js", get(|h: HeaderMap| asset(h, &EC_JS, "text/javascript")))
         .route("/static/event-calendar.min.css", get(|h: HeaderMap| asset(h, &EC_CSS, "text/css")))
         .route("/static/calendar.js", get(|h: HeaderMap| asset(h, &CAL_JS, "text/javascript")))

@@ -362,7 +362,7 @@ pub async fn calendars(State(st): State<AppState>, ApiUser(u): ApiUser) -> ApiRe
                 color: p.color.or(c.color).unwrap_or_else(|| events::DEFAULT_COLOR.into()),
                 own: c.owner_id == u.id(),
                 owner: c.owner_name,
-                writable: c.access.can_write() && !c.subscribed,
+                writable: c.access.can_write() && !(c.subscribed || c.birthdays),
                 subscribed: c.subscribed,
                 hidden: p.hidden,
                 sort_order: p.sort_order,
