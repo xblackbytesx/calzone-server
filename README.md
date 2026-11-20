@@ -111,6 +111,7 @@ docker compose exec calzone-server-app calzone-server user passphrase anna
 ```
 
 Moving over from Baikal: [docs/leaving-baikal.md](docs/leaving-baikal.md).
+From Google Calendar: [docs/leaving-google.md](docs/leaving-google.md).
 
 ## Development
 
